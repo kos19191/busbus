@@ -216,6 +216,7 @@ export class NskProvider implements TransitProvider {
 
   async stopBoard(stop: Stop): Promise<StopBoard> {
     // WAP-табло: m=<маршрут>&tt=<тип>&s=<остановка>&r=<направление>&p=1
+    // m=0 означает «все маршруты», tt — тип транспорта (1 автобус, 2 троллейбус…).
     if (!stop.sourceId) throw new Error('Нет идентификатора остановки');
     const url = `${NSK_WAP}/index.php?m=0&tt=0&s=${encodeURIComponent(stop.sourceId)}&r=W&p=1`;
     const res = await httpGet(withProxy(url), { timeoutMs: this.opts.timeoutMs });
@@ -285,27 +286,44 @@ function parseNskStops(raw: unknown): Stop[] {
   return out;
 }
 
-function parseNskStopBoard(html: string, stop: Stop): StopBoard {
+/**
+ * Разбор WAP-табло ЦУГАЭТ. Страница — старый XHTML без таблиц: строки идут
+ * как «<маршрут> <время|минуты> <конечная>», поэтому разбираем текст.
+ * Формат ячейки: «13 13:57 Ключ-Камышенское плато» или «13 4 мин …».
+ */
+export function parseNskStopBoard(html: string, stop: Stop): StopBoard {
   const entries: StopBoardEntry[] = [];
-  // WAP-табло: строки вида «13 11:45» и «13 4 мин»
-  const re = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
-  let row: RegExpExecArray | null;
-  while ((row = re.exec(html))) {
-    const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((c) =>
-      c[1].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim(),
-    );
-    if (cells.length < 2) continue;
-    const timeCell = cells.find((c) => /^\d{1,2}\s*:\s*\d{2}$/.test(c) || /^\d+\s*мин/.test(c));
-    const routeCell = cells.find((c) => /^[0-9А-ЯA-Z]{1,4}([КкAa])?$/.test(c));
-    if (timeCell && routeCell) {
-      const minutes = /мин/.test(timeCell) ? parseInt(timeCell, 10) : undefined;
-      entries.push({
-        routeNumber: routeCell,
-        kind: 'bus',
-        minutes: minutes ?? 0,
-        time: /:/.test(timeCell) ? timeCell.replace(/\s/g, '') : undefined,
-      });
-    }
+  const seen = new Set<string>();
+  const text = html
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<[^>]+>/g, '\n')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, '&');
+
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/\s+/g, ' ').trim();
+    if (!line || line.length > 120) continue;
+    // «13 13:57 …» / «13 4 мин …» / «13к 4 минуты»
+    const m = /^([0-9]{1,3}[А-Яа-яA-Za-z]?)\s+(\d{1,2}:\d{2}|\d{1,3}\s*мин(?:ут[аы]?)?)\s*(.*)$/.exec(line);
+    if (!m) continue;
+    const routeNumber = m[1].toUpperCase();
+    const when = m[2];
+    const tail = m[3].trim();
+    const key = `${routeNumber}|${when}|${tail}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const isClock = /^\d{1,2}:\d{2}$/.test(when);
+    const minutes = isClock ? undefined : parseInt(when, 10);
+    entries.push({
+      routeNumber,
+      kind: /^[А-Яа-я]?т/.test(routeNumber) ? 'trolley' : 'bus',
+      minutes: minutes ?? 0,
+      time: isClock ? when : undefined,
+      label: tail || undefined,
+    });
+    if (entries.length >= 40) break;
   }
   return { stopId: stop.id, stopName: stop.name, entries, fetchedAt: Date.now() };
 }
