@@ -269,4 +269,61 @@ print('--- SELECTS/OPTS', re.findall(r'<select[^>]*>', txt)[:4], re.findall(r'<o
 PY
 done
 
+say "NSK TRASSES FULL"
+curl -sS -m 40 "https://map.nskgortrans.ru/trasses.php?r=1-13-W-13" -o t13.json || true
+ls -l t13.json || true
+python3 - <<'PY' || true
+import json
+d = json.load(open('t13.json', encoding='utf-8', errors='replace'))
+r = d['trasses'][0]['r']
+print('branches', len(r))
+for br in r:
+    u = br.get('u') or []
+    stops = [p for p in u if p.get('id')]
+    print(' marsh', br.get('marsh'), 'points', len(u), 'stops', len(stops))
+    for p in stops[:8]:
+        print('   ', p.get('id'), p.get('len'), repr(p.get('n'))[:70])
+    print('   keys of point:', sorted({k for p in u for k in p}))
+PY
+echo "--- raw head"
+head -c 300 t13.json | xxd | head -6 || true
+
+say "NSK ENCODING VARIANTS"
+for hdr in "" "-H Accept-Charset:utf-8" "-H Accept-Charset:windows-1251"; do
+  echo "=== headers: $hdr"
+  curl -sS -m 30 $hdr "https://map.nskgortrans.ru/listmarsh.php?r" -o lm2.json || true
+  head -c 220 lm2.json | xxd | head -3 || true
+  python3 - <<'PY' || true
+import json
+try:
+    d = json.load(open('lm2.json', encoding='utf-8', errors='replace'))
+    print('  stopb raw:', repr(d[0]['ways'][0]['stopb'])[:80])
+    nm = d[0]['ways'][0]['stopb']
+    try:
+        fixed = nm.encode('cp1251', errors='strict').decode('utf-8')
+        print('  cp1251->utf8 OK:', fixed)
+    except Exception as e:
+        print('  cp1251->utf8 fail:', e)
+except Exception as e:
+    print('  parse fail', e)
+PY
+done
+
+say "NSK WAP CELLS"
+curl -sS -m 30 "https://m.nskgortrans.ru/index.php?m=13&tt=1&s=2133&r=A&p=1" -o wb2.html || true
+head -c 240 wb2.html | xxd | head -4 || true
+python3 - <<'PY' || true
+import re, html
+raw = open('wb2.html','rb').read()
+for enc in ('utf-8','cp1251'):
+    try:
+        txt = raw.decode(enc); print('decoded as', enc); break
+    except Exception:
+        txt = None
+if txt:
+    cells = [html.unescape(re.sub(r'<[^>]+>','',c)).strip() for c in re.findall(r'<t[dh][^>]*>([\s\S]*?)</t[dh]>', txt)]
+    print('cells', len(cells), cells[:40])
+    print('tables', len(re.findall(r'<table', txt)), 'links', sorted(set(re.findall(r'href=\"([^\"]+)\"', txt)))[:10])
+PY
+
 say "DONE"
