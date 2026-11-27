@@ -39,10 +39,30 @@ const out = {};
  */
 const NSK_TYPE = { bus: 1, trolley: 2, tram: 3, minibus: 8 };
 
+/** Справочник маршрутов ЦУГАЭТ: `<type>-<marsh>-W-<name>`, где marsh — внутренний id. */
+async function nskRouteIds() {
+  const res = await fetch('https://map.nskgortrans.ru/listmarsh.php?r', {
+    headers: { 'User-Agent': 'BusBus/1.0 (demo geometry builder)' },
+  });
+  if (!res.ok) throw new Error(`listmarsh: HTTP ${res.status}`);
+  const groups = await res.json();
+  const map = new Map();
+  for (const group of groups) {
+    const type = Number(group.type) + 1;
+    for (const way of group.ways ?? []) map.set(`${type}:${way.name}`, way.marsh);
+  }
+  return map;
+}
+
+let NSK_IDS = null;
+
 async function fromNskTrasses(line) {
   const type = NSK_TYPE[line.kind];
   if (!type) return null;
-  const id = `${type}-${line.number}-W-${line.number}`;
+  if (!NSK_IDS) NSK_IDS = await nskRouteIds();
+  const marsh = NSK_IDS.get(`${type}:${line.number}`);
+  if (!marsh) throw new Error(`маршрут не найден в справочнике (type ${type})`);
+  const id = `${type}-${marsh}-W-${line.number}`;
   const url = `https://map.nskgortrans.ru/trasses.php?r=${encodeURIComponent(id)}`;
   const res = await fetch(url, { headers: { 'User-Agent': 'BusBus/1.0 (demo geometry builder)' } });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -55,9 +75,16 @@ async function fromNskTrasses(line) {
       const lat = Number(p.lat);
       const lon = Number(p.lng);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      if (p.id && p.n) {
+        stops.push({
+          id: String(p.id),
+          name: String(p.n).replace(/\s+/g, ' ').trim(),
+          lat,
+          lon,
+          at: points.length,
+        });
+      }
       points.push([+lat.toFixed(6), +lon.toFixed(6)]);
-      if (p.id && p.n)
-        stops.push({ id: String(p.id), name: String(p.n).replace(/\s+/g, ' ').trim(), lat, lon });
     }
   }
   if (points.length < 2) throw new Error('нет точек');
@@ -72,8 +99,8 @@ async function fromNskTrasses(line) {
   const last = forward[forward.length - 1];
   if (thinned[thinned.length - 1] !== last) thinned.push(last);
 
-  // оставляем только остановки первого направления (по близости к линии)
-  const near = stops.filter((st) => distToLine(forward, st) < 120);
+  // оставляем только остановки первого направления (до точки разворота)
+  const near = stops.filter((st) => st.at <= cut).map(({ at, ...rest }) => rest);
   return { points: thinned, stops: near };
 }
 
@@ -92,28 +119,6 @@ function farthestTurn(points) {
   return best > 5 ? best : points.length - 1;
 }
 
-/** Минимальное расстояние от остановки до линии, метры. */
-function distToLine(line, stop) {
-  const kx = Math.cos((stop.lat * Math.PI) / 180) * 111_320;
-  const ky = 110_540;
-  let best = Infinity;
-  for (let i = 1; i < line.length; i++) {
-    const [aLat, aLon] = line[i - 1];
-    const [bLat, bLon] = line[i];
-    const ax = (aLon - stop.lon) * kx;
-    const ay = (aLat - stop.lat) * ky;
-    const bx = (bLon - stop.lon) * kx;
-    const by = (bLat - stop.lat) * ky;
-    const dx = bx - ax;
-    const dy = by - ay;
-    const len2 = dx * dx + dy * dy;
-    const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
-    const px = ax + dx * t;
-    const py = ay + dy * t;
-    best = Math.min(best, Math.hypot(px, py));
-  }
-  return best;
-}
 
 for (const line of lines) {
   const key = `${line.city}:${line.kind}:${line.number}`;
