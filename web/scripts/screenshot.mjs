@@ -86,6 +86,21 @@ const scenarios = [
   },
 ];
 
+// живой режим: включаем до первой отрисовки, чтобы приложение стартовало с источником
+const liveScenario = {
+  name: process.env.SHOT_LIVE_NAME || 'mobile-live',
+  viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+  init: () => {
+    const raw = localStorage.getItem('busbus.settings.v1');
+    const base = raw ? JSON.parse(raw) : { city: 'nsk', theme: 'dark' };
+    localStorage.setItem('busbus.settings.v1', JSON.stringify({ ...base, mode: 'live' }));
+  },
+  steps: async (page) => {
+    await page.waitForSelector('.vehicle-marker', { timeout: 25000 }).catch(() => {});
+    await new Promise((r) => setTimeout(r, 2500));
+  },
+};
+
 const browser = await puppeteer.launch({
   executablePath,
   headless: true,
@@ -93,7 +108,7 @@ const browser = await puppeteer.launch({
 });
 
 const report = [];
-for (const sc of scenarios) {
+for (const sc of [...scenarios, ...(process.env.SHOT_LIVE ? [liveScenario] : [])]) {
   const page = await browser.newPage();
   const logs = [];
   page.on('console', (m) => {
@@ -101,6 +116,7 @@ for (const sc of scenarios) {
   });
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
   await page.setViewport(sc.viewport);
+  if (sc.init) await page.evaluateOnNewDocument(sc.init);
   await page.goto(URL, { waitUntil: 'networkidle2', timeout: 45000 });
   await new Promise((r) => setTimeout(r, 900));
   try {

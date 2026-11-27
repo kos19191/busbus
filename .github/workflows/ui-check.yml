@@ -46,7 +46,7 @@ jobs:
           ls /usr/bin | grep -i chrom | head -5 || true
           npx vite preview --outDir dist --port 4173 --host 127.0.0.1 &
           sleep 4
-          node ./scripts/screenshot.mjs
+          SHOT_LIVE=1 node ./scripts/screenshot.mjs
 
       - name: Publish screenshots
         run: |
