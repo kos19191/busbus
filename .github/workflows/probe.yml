@@ -8,13 +8,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Headers NSK
-        run: curl -sS -m 30 -D - -o /dev/null "https://map.nskgortrans.ru/markers.php?r=1-8-W-8" || true
+        run: |
+          curl -sS -m 30 -D - -o /dev/null "https://map.nskgortrans.ru/markers.php?r=1-8-W-8" || true
       - name: Headers KRK
-        run: curl -sS -m 30 -D - -o /dev/null "https://mu-kgt.ru/informing/wap/marsh/?m=85&action=getMarshData" || true
+        run: |
+          curl -sS -m 30 -D - -o /dev/null "https://mu-kgt.ru/informing/wap/marsh/?m=85&action=getMarshData" || true
       - name: Headers busti
-        run: curl -sS -m 30 -D - -o /dev/null "https://ru.busti.me/api/v1/datasources/" || true
+        run: |
+          curl -sS -m 30 -D - -o /dev/null "https://ru.busti.me/api/v1/datasources/" || true
       - name: Headers OSM tiles
-        run: curl -sS -m 30 -D - -o /dev/null -A "BusBus/1.0 (contact: test@example.com)" "https://tile.openstreetmap.org/13/5982/2590.png" || true
+        run: |
+          curl -sS -m 30 -D - -o /dev/null -A "BusBus/1.0 (contact: test@example.com)" "https://tile.openstreetmap.org/13/5982/2590.png" || true
       - name: KRK full page
         run: |
           curl -sS -m 60 "https://mu-kgt.ru/informing/" -o page.html
