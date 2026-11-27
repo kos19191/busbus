@@ -3,73 +3,22 @@ on:
   workflow_dispatch:
   push:
     branches: [arena/e840c013-busbus]
-    paths: ['.github/workflows/probe.yml']
+    paths: ['.github/probe.sh', '.github/workflows/probe.yml']
+permissions:
+  contents: write
 jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Headers NSK
-        continue-on-error: true
+      - uses: actions/checkout@v4
+      - name: Run probe
+        run: bash .github/probe.sh > probe_out.txt 2>&1 || true
+      - name: Publish results
         run: |
-          curl -sS -m 30 -D - -o /dev/null "https://map.nskgortrans.ru/markers.php?r=1-8-W-8" || true
-      - name: Headers KRK
-        continue-on-error: true
-        run: |
-          curl -sS -m 30 -D - -o /dev/null "https://mu-kgt.ru/informing/wap/marsh/?m=85&action=getMarshData" || true
-      - name: Headers busti
-        continue-on-error: true
-        run: |
-          curl -sS -m 30 -D - -o /dev/null "https://ru.busti.me/api/v1/datasources/" || true
-      - name: Headers OSM tiles
-        continue-on-error: true
-        run: |
-          curl -sS -m 30 -D - -o /dev/null -A "BusBus/1.0" "https://tile.openstreetmap.org/13/5982/2590.png" || true
-      - name: KRK full page
-        continue-on-error: true
-        run: |
-          curl -sS -m 60 "https://mu-kgt.ru/informing/" -o page.html || true
-          wc -c page.html || true
-          grep -oE '(src|href)="[^"]+"' page.html | sort -u | head -80 || true
-          grep -oE 'action=[A-Za-z_]+' page.html | sort -u | head -40 || true
-      - name: KRK js scan
-        continue-on-error: true
-        run: |
-          grep -oE 'src="[^"]+\.js[^"]*"' page.html | sed 's/src="//;s/"$//' | sort -u > jslist.txt || true
-          cat jslist.txt || true
-          while read -r f; do
-            test -n "$f" || continue
-            echo "=== $f"
-            curl -sS -m 60 "https://mu-kgt.ru$f" -o js.tmp || continue
-            wc -c js.tmp
-            grep -oE 'action=[A-Za-z_]+' js.tmp | sort -u | head -40 || true
-            grep -oE '[\x27"]https?://[^\x27"]+' js.tmp | sort -u | head -20 || true
-          done < jslist.txt
-      - name: NSK endpoints
-        continue-on-error: true
-        run: |
-          echo "--- minibus 29"
-          curl -sS -m 30 "https://map.nskgortrans.ru/markers.php?r=8-29-W-29" | head -c 600 || true
-          echo
-          echo "--- grasp stops"
-          curl -sS -m 30 "https://map.nskgortrans.ru/components/com_planrasp/helpers/grasp.php?q=%D0%92%D0%BE%D0%BA%D0%B7%D0%B0%D0%BB&typeview=stops" | head -c 800 || true
-          echo
-          echo "--- mobile stop board"
-          curl -sS -m 30 "https://m.nskgortrans.ru/index.php?m=8&t=2&tt=1&s=0&r=A&p=1" | head -c 800 || true
-      - name: busti api
-        continue-on-error: true
-        run: |
-          curl -sS -m 30 "https://ru.busti.me/api/v1/datasources/" | head -c 1200 || true
-          echo
-          curl -sS -m 30 "https://ru.busti.me/api/v1/routes/?city_id=1" | head -c 800 || true
-      - name: overpass test
-        continue-on-error: true
-        run: |
-          curl -sS -m 120 -G "https://overpass-api.de/api/interpreter" --data-urlencode 'data=[out:json][timeout:60];node(55.0,82.9,55.02,82.93)[public_transport=platform];out 3;' | head -c 800 || true
-      - name: proxies
-        continue-on-error: true
-        run: |
-          echo "--- codetabs"
-          curl -sS -m 40 -D - "https://api.codetabs.com/v1/proxy?quest=https://map.nskgortrans.ru/markers.php%3Fr%3D1-8-W-8" | head -c 700 || true
-          echo
-          echo "--- allorigins"
-          curl -sS -m 40 -D - "https://api.allorigins.win/raw?url=https%3A%2F%2Fmap.nskgortrans.ru%2Fmarkers.php%3Fr%3D1-8-W-8" | head -c 700 || true
+          git config user.name "Arena Agent"
+          git config user.email "agent@arena.ai"
+          mkdir -p ci
+          cp probe_out.txt ci/probe_out.txt
+          git add -f ci/probe_out.txt
+          git commit -m "ci: probe results" || true
+          git push origin HEAD:refs/heads/ci/probe --force
