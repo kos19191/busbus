@@ -42,9 +42,26 @@ jobs:
           gh api "repos/${{ github.repository }}/contents/ci/apk/busbus.apk?ref=ci/apk" --jq '.content' \
             | base64 -d > web/dist/busbus.apk
           ls -la web/dist/busbus.apk
+      # Резервный канал: даже если GitHub Pages в репозитории не включён,
+      # собранная PWA лежит в ветке ci/pages и доступна по адресу
+      # https://kos19191.github.io/busbus/ (после включения Pages → Deploy from branch)
+      - name: Publish build to ci/pages
+        run: |
+          git config user.name "Arena Agent"
+          git config user.email "agent@arena.ai"
+          cd web/dist
+          touch .nojekyll
+          git init -q .
+          git add -A
+          git -c user.email=agent@arena.ai -c user.name="Arena Agent" commit -qm "build: PWA ${{ github.sha }}"
+          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" HEAD:refs/heads/ci/pages
+
       - uses: actions/configure-pages@v5
+        continue-on-error: true
       - uses: actions/upload-pages-artifact@v3
+        continue-on-error: true
         with:
           path: web/dist
       - id: deployment
+        continue-on-error: true
         uses: actions/deploy-pages@v4
