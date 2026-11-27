@@ -47,6 +47,37 @@ interface NskMarker {
 
 const PATH_NAMES = ['bus', 'trolley', 'tram', 'minibus'];
 
+/**
+ * Префикс типа в запросах ЦУГАЭТ: `listmarsh.type + 1`
+ * (0→1 автобус, 1→2 троллейбус, 2→3 трамвай, 7→8 маршрутка).
+ */
+export function sourceTypeOf(route: Route): number {
+  const fromSource = route.sourceKind !== undefined ? Number(route.sourceKind) : NaN;
+  if (Number.isFinite(fromSource)) return fromSource + 1;
+  return nskTypeFromKind(route.kind) + 1;
+}
+
+interface NskTracePoint {
+  lat: string;
+  lng: string;
+  /** id остановки (только на точках-остановках) */
+  id?: string;
+  /** название остановки */
+  n?: string;
+  len?: string;
+}
+
+interface NskTrassesResponse {
+  trasses: { r: { pc?: string; marsh: string; u: NskTracePoint[] }[] }[];
+}
+
+export interface NskTrace {
+  /** Геометрия линии по улицам, [lat, lon] */
+  points: [number, number][];
+  /** Остановки вдоль линии с id для табло */
+  stops: Stop[];
+}
+
 function directionCode(dir?: string): string {
   if (dir === 'A' || dir === 'B') return dir;
   return 'W';
@@ -58,6 +89,7 @@ export class NskProvider implements TransitProvider {
   readonly mode = 'live' as const;
   readonly label = 'ЦУГАЭТ · онлайн';
   private cache: { at: number; routes: Route[] } | null = null;
+  private traceCache = new Map<string, { at: number; trace: NskTrace }>();
   private opts: ProviderOptions;
 
   constructor(opts: ProviderOptions = {}) {
@@ -93,9 +125,14 @@ export class NskProvider implements TransitProvider {
     return unique;
   }
 
+  /**
+   * Формат идентификатора в запросах ЦУГАЭТ: `<type>-<marsh>-<A|B|W>-<name>`,
+   * где type — это `listmarsh.type + 1` (bus=1, trolley=2, tram=3, minibus=8).
+   * Именно такой префикс понимают markers.php и trasses.php.
+   */
   buildQuery(routes: Route[], direction?: string): string {
     return routes
-      .map((r) => `${nskTypeFromKind(r.kind)}-${r.sourceId}-${directionCode(direction)}-${r.number}`)
+      .map((r) => `${sourceTypeOf(r)}-${r.sourceId}-${directionCode(direction)}-${r.number}`)
       .join('|');
   }
 
@@ -142,12 +179,39 @@ export class NskProvider implements TransitProvider {
     return this.vehiclesFor(routes, direction);
   }
 
+  /**
+   * Остановки города. У ЦУГАЭТ нет отдельного справочника остановок,
+   * зато trasses.php отдаёт остановки с id прямо вдоль линии маршрута,
+   * поэтому собираем их из трасс выбранных маршрутов (кэш на 30 минут).
+   */
   async stops(query?: string): Promise<Stop[]> {
-    const url = `${NSK_BASE}/components/com_planrasp/helpers/grasp.php?q=${encodeURIComponent(query ?? '')}&typeview=stops`;
-    const res = await httpGet(withProxy(url), { timeoutMs: this.opts.timeoutMs });
-    if (res.status !== 200) throw new Error(`grasp: HTTP ${res.status}`);
-    const raw = parseJsonLoose<unknown>(res.text);
-    return parseNskStops(raw);
+    const routes = (await this.routes()).slice(0, 12);
+    const out = new Map<string, Stop>();
+    for (const route of routes) {
+      try {
+        const trace = await this.trace(route);
+        for (const stop of trace.stops) out.set(stop.id, stop);
+      } catch {
+        /* отдельный маршрут мог не отдать трассу */
+      }
+    }
+    const list = [...out.values()];
+    const q = (query ?? '').trim().toLowerCase();
+    return q ? list.filter((s) => s.name.toLowerCase().includes(q)) : list;
+  }
+
+  /** Линия маршрута и остановки из trasses.php (кэш на 30 минут). */
+  async trace(route: Route): Promise<NskTrace> {
+    const key = route.id;
+    const cached = this.traceCache.get(key);
+    if (cached && Date.now() - cached.at < 30 * 60_000) return cached.trace;
+    const q = encodeURIComponent(this.buildQuery([route]));
+    const res = await httpGet(withProxy(`${NSK_BASE}/trasses.php?r=${q}`), { timeoutMs: this.opts.timeoutMs });
+    if (res.status !== 200) throw new Error(`trasses: HTTP ${res.status}`);
+    const data = parseJsonLoose<NskTrassesResponse>(res.text);
+    const trace = parseNskTrace(data, route);
+    this.traceCache.set(key, { at: Date.now(), trace });
+    return trace;
   }
 
   async stopBoard(stop: Stop): Promise<StopBoard> {
@@ -254,4 +318,36 @@ export function nskDirectionLabel(dir: string): string {
 
 export function nskUpcoming(v: Vehicle): Arrival[] {
   return v.upcoming ?? [];
+}
+
+/**
+ * Разбор trasses.php: ответ содержит одно или два ответвления (`r`),
+ * в каждом — точки линии; точки с `id`/`n` являются остановками.
+ */
+export function parseNskTrace(data: NskTrassesResponse, route: Route): NskTrace {
+  const points: [number, number][] = [];
+  const stops = new Map<string, Stop>();
+  const branches = data.trasses?.[0]?.r ?? [];
+  for (const branch of branches) {
+    for (const p of branch.u ?? []) {
+      const lat = Number(p.lat);
+      const lon = Number(p.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      points.push([lat, lon]);
+      const stopId = p.id ? String(p.id) : '';
+      const name = (p.n ?? '').trim();
+      if (!stopId || !name) continue;
+      const key = `${stopId}:${name}`;
+      if (stops.has(key)) continue;
+      stops.set(key, {
+        id: `nsk:${stopId}:${name}`,
+        name,
+        lat,
+        lon,
+        sourceId: stopId,
+        routes: [route.number],
+      });
+    }
+  }
+  return { points, stops: [...stops.values()] };
 }

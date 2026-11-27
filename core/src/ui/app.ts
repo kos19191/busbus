@@ -125,13 +125,26 @@ export class BusApp {
     this.selected = { ...this.selected, route, vehicles: [], selectedVehicleId: null, status: 'loading', stop: null };
     this.store.pushRecent(route.id);
     this.board = null;
-    this.drawRouteLine(route);
     this.renderSheet();
+    void this.drawRouteLine(route);
     void this.refresh(true);
     this.startPolling();
   }
 
-  private drawRouteLine(route: Route): void {
+  private async drawRouteLine(route: Route): Promise<void> {
+    // Живой источник может отдать реальную геометрию по улицам.
+    if (this.provider.trace && this.provider.mode === 'live') {
+      try {
+        const trace = await this.provider.trace(route);
+        if (trace.points.length > 1) {
+          this.map.setRouteLine(trace.points);
+          if (trace.stops.length) this.busesStops = trace.stops;
+          return;
+        }
+      } catch {
+        /* источник не отдал трассу — рисуем демо-схему */
+      }
+    }
     const cityLines = demoLineFor(route.city, route.number, route.kind);
     if (!cityLines) return;
     this.map.setRouteLine(cityLines.points);

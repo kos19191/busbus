@@ -22,6 +22,9 @@ export interface TransitProvider {
   /** Остановки города/маршрута, если источник их отдаёт */
   stops?(query?: string): Promise<Stop[]>;
 
+  /** Линия маршрута по улицам (геометрия + остановки), если источник умеет */
+  trace?(route: Route): Promise<{ points: [number, number][]; stops: Stop[] }>;
+
   /** Человекопонятная подпись источника для UI */
   readonly label: string;
 }

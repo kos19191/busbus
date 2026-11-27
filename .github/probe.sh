@@ -326,4 +326,34 @@ if txt:
     print('tables', len(re.findall(r'<table', txt)), 'links', sorted(set(re.findall(r'href=\"([^\"]+)\"', txt)))[:10])
 PY
 
+say "NSK WAP DUMP"
+curl -sS -m 30 "https://m.nskgortrans.ru/index.php?m=13&tt=1&s=2133&r=A&p=1" -o wb3.html || true
+wc -c wb3.html
+# печатаем сырые байты; на панели тут видна настоящая кодировка
+cat -v wb3.html | head -c 4000 || true
+echo
+echo "--- structure"
+grep -oE '<(table|tr|td|div|span|b|a)[^>]*>' wb3.html | head -30 || true
+echo "--- plain text via sed"
+sed -e 's/<[^>]*>/ /g' wb3.html | tr -s ' ' | head -c 2000 || true
+
+say "NSK FOREACH STOP"
+python3 - <<'PY' || true
+import json, subprocess, urllib.parse
+d = json.load(open('t13.json', encoding='utf-8', errors='replace'))
+u = d['trasses'][0]['r'][0]['u']
+stops = [p for p in u if p.get('id')][:3]
+print('stop ids:', [(p['id'], p['n']) for p in stops])
+for p in stops:
+    url = f"https://m.nskgortrans.ru/index.php?m=13&tt=1&s={p['id']}&r=A&p=1"
+    out = subprocess.run(['curl','-sS','-m','30',url], capture_output=True).stdout
+    print('=== stop', p['id'], p['n'], 'bytes', len(out))
+    txt = out.decode('utf-8', errors='replace')
+    import re
+    cells = [re.sub(r'<[^>]+>','',c).strip() for c in re.findall(r'<t[dh][^>]*>([\s\S]*?)</t[dh]>', txt)]
+    print('cells', cells[:30])
+    if not cells:
+        print('RAWHEAD', txt[:600].replace('\n',' '))
+PY
+
 say "DONE"
