@@ -1,4 +1,11 @@
 import type { CityId } from '../transport/types';
+import geo from './demo-geo.json';
+
+/**
+ * Реальная геометрия по улицам (построена OSRM, см. scripts/build-geo.mjs).
+ * Для маршрутов, которых ещё нет в geo, используется упрощённая схема ниже.
+ */
+const REAL_GEO = geo as unknown as Record<string, [number, number][]>;
 
 /**
  * Упрощённые линии демонстрационных маршрутов (по осям улиц реальных городов).
@@ -175,11 +182,35 @@ export const DEMO_LINES: DemoLine[] = [
 ];
 
 export function demoLinesFor(city: CityId): DemoLine[] {
-  return DEMO_LINES.filter((l) => l.city === city);
+  return DEMO_LINES.filter((l) => l.city === city).map(withRealGeo);
+}
+
+/** Подставить геометрию по улицам, если она есть. */
+export function withRealGeo(line: DemoLine): DemoLine {
+  const key = `${line.city}:${line.kind}:${line.number}`;
+  const points = REAL_GEO[key];
+  return points && points.length > 1 ? { ...line, points } : line;
+}
+
+export function realGeoFor(city: CityId, number: string, kind?: string): [number, number][] | undefined {
+  if (kind) {
+    const exact = REAL_GEO[`${city}:${kind}:${number}`];
+    if (exact) return exact;
+  }
+  const hit = Object.entries(REAL_GEO).find(([k]) => k.startsWith(`${city}:`) && k.endsWith(`:${number}`));
+  return hit?.[1];
 }
 
 export function demoLineFor(city: CityId, number: string, kind?: string): DemoLine | undefined {
   const lines = demoLinesFor(city);
+  const direct = realGeoFor(city, number, kind);
+  if (!direct) {
+    const base = lines.find((l) => l.number === number && (!kind || l.kind === kind)) ?? lines.find((l) => l.number === number);
+    return base;
+  }
+  const template = lines.find((l) => l.number === number && (!kind || l.kind === kind)) ?? lines.find((l) => l.number === number);
+  if (!template) return undefined;
+  return { ...template, points: direct };
   return (
     lines.find((l) => l.number === number && (!kind || l.kind === kind)) ??
     lines.find((l) => l.number === number) ??
