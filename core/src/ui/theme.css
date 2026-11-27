@@ -291,8 +291,19 @@ a {
 
 .sheet__body {
   overflow-y: auto;
+  /* не даём телу распирать шторку: внутри списков оно скроллится само */
+  min-height: 0;
+  flex: 1 1 auto;
   padding: 4px 12px 8px;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* на узком экране шторка может занять больше половины — так видно больше строк */
+@media (max-width: 759px) {
+  .sheet {
+    max-height: 78vh;
+  }
 }
 
 .sheet__actions {
