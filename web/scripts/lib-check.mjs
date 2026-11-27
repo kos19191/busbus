@@ -17,8 +17,8 @@ const outfile = path.join(root, 'web', 'scripts', '.lib-bundle.mjs');
 
 fs.writeFileSync(
   entry,
-  `import { createProvider } from '../../core/src/transport/index.ts';
-export { createProvider };
+  `import { createLiveProvider } from '../../core/src/transport/index.ts';
+export { createLiveProvider };
 `,
 );
 
@@ -33,7 +33,7 @@ await build({
   alias: {},
 });
 
-const { createProvider } = await import('file://' + outfile);
+const { createLiveProvider } = await import('file://' + outfile);
 
 const only = process.argv[2] || 'nsk';
 const results = [];
@@ -45,7 +45,7 @@ function log(ok, msg) {
 }
 
 for (const city of only === 'all' ? ['nsk', 'krsk'] : [only]) {
-  const p = createProvider(city, 'live');
+  const p = createLiveProvider(city);
   try {
     const routes = await p.routes();
     log(routes.length > 0, `${city}: маршрутов ${routes.length}`);
