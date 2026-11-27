@@ -7,9 +7,19 @@ import { DemoProvider } from '../data/demo';
 export * from './types';
 export * from './provider';
 export * from './geo';
-export { httpGet, setHttpImpl, setProxy, getProxy, withProxy, DEFAULT_PROXY, installAndroidBridge } from './http';
+export {
+  httpGet,
+  httpGetDirect,
+  setHttpImpl,
+  setProxy,
+  getProxy,
+  withProxy,
+  DEFAULT_PROXY,
+  PUBLIC_PROXIES,
+  installAndroidBridge,
+} from './http';
 export type { HttpImpl, HttpRequest, HttpResponse, ProxyConfig } from './http';
-export { NskProvider, parseNskTime } from './nsk';
+export { NskProvider, parseNskTime, parseNskTrace, parseNskForecast } from './nsk';
 export { KrskProvider, krkAllRoutes, parseKrskPayload, krkKindOf } from './krsk';
 export type { KrskParsedRoute, KrskParsedVehicle } from './krsk';
 export { DemoProvider } from '../data/demo';

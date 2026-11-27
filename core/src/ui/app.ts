@@ -1,6 +1,7 @@
 import type { TransitProvider } from '../transport/provider';
 import { createProvider, resetDemo } from '../transport';
-import { setProxy } from '../transport/http';
+import { setProxy, httpGetDirect, isNativeHttp, PUBLIC_PROXIES } from '../transport/http';
+import { parseJsonLoose } from '../transport/provider';
 import type { CityId, DataMode, Route, Stop, StopBoard, TransportKind, Vehicle } from '../transport/types';
 import { CITIES, KIND_LABEL } from '../transport/types';
 import { demoLineFor } from '../data/demo-lines';
@@ -47,6 +48,36 @@ export class BusApp {
   private pollTimer: number | null = null;
   private board: StopBoard | null = null;
   private stopsLoading = false;
+  private proxyProbed = false;
+
+  /**
+   * Подбирает работающий публичный CORS-прокси (один раз за сессию).
+   * Проверяем не заголовки, а реальный ответ источника — прокси отвечают
+   * по-разному, часть из них просто недоступна.
+   */
+  private async ensureProxy(): Promise<void> {
+    if (this.proxyProbed) return;
+    this.proxyProbed = true;
+    for (const template of PUBLIC_PROXIES) {
+      const probe = template.replace('{url}', encodeURIComponent('https://map.nskgortrans.ru/listmarsh.php?r'));
+      try {
+        const res = await httpGetDirect(probe, { timeoutMs: 12000 });
+        if (res.status !== 200) continue;
+        const parsed = parseJsonLoose<unknown[]>(res.text);
+        if (!Array.isArray(parsed) || !parsed.length) continue;
+        setProxy({ enabled: true, template });
+        this.store.set({ proxyEnabled: true, proxyTemplate: template });
+        this.provider = createProvider(this.store.get().city, 'live');
+        this.renderSheet();
+        void this.loadRoutes();
+        this.toast('Живые данные подключены через прокси');
+        return;
+      } catch {
+        /* пробуем следующий */
+      }
+    }
+    this.toast('Живые данные в браузере требуют прокси — укажите свой в настройках');
+  }
   private overview: Vehicle[] = [];
   /** Панель свёрнута до заголовка — больше карты */
   private collapsed = true;
@@ -98,6 +129,8 @@ export class BusApp {
     const s = this.store.get();
     setProxy({ enabled: s.proxyEnabled, template: s.proxyTemplate });
     this.provider = createProvider(s.city, s.mode);
+    // браузер без прокси: пробуем публичные, чтобы живой режим работал «из коробки»
+    if (s.mode === 'live' && !s.proxyEnabled && !isNativeHttp()) void this.ensureProxy();
     this.map.setCity(s.city);
   }
 

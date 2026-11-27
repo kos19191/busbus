@@ -48,6 +48,16 @@ export function setHttpImpl(next: HttpImpl): void {
   impl = next;
 }
 
+/** Внешние реализации (мост Android) — их перебором прокси не подменяем. */
+let nativeImpl = false;
+export function setNativeHttpImpl(next: HttpImpl): void {
+  impl = next;
+  nativeImpl = true;
+}
+export function isNativeHttp(): boolean {
+  return nativeImpl;
+}
+
 /**
  * Нативный мост Android (JavascriptInterface BusBusAndroid).
  * Позволяет получать данные официальных порталов без CORS — обычный fetch
@@ -96,6 +106,22 @@ export const DEFAULT_PROXY: ProxyConfig = {
   enabled: false,
   template: 'https://api.allorigins.win/raw?url={url}',
 };
+
+/**
+ * Публичные CORS-прокси, которые перебираются автоматически в браузере:
+ * официальные источники не отдают `Access-Control-Allow-Origin`, поэтому
+ * прямой fetch из веб-версии блокируется. В APK мост работает без них.
+ */
+export const PUBLIC_PROXIES = [
+  'https://api.allorigins.win/raw?url={url}',
+  'https://api.codetabs.com/v1/proxy?quest={url}',
+  'https://proxy.corsfix.com/?{url}',
+];
+
+/** Запрос без прокси и без запоминания — для проверок и служебных вызовов. */
+export async function httpGetDirect(url: string, opts: Partial<HttpRequest> = {}): Promise<HttpResponse> {
+  return fetchImpl({ ...opts, url, method: 'GET' });
+}
 
 let proxy: ProxyConfig = DEFAULT_PROXY;
 
