@@ -2,7 +2,6 @@ import { httpGet, withProxy } from './http';
 import type { TransitProvider, ProviderOptions } from './provider';
 import { kindFromNskType, nskTypeFromKind, parseJsonLoose, normRouteNumber } from './provider';
 import { arrivalsFromRasp } from './rasp';
-import { decodeCp1251 } from './encoding';
 import type { Arrival, Route, Stop, StopBoard, StopBoardEntry, Vehicle } from './types';
 
 /**
@@ -13,17 +12,18 @@ import type { Arrival, Route, Stop, StopBoard, StopBoardEntry, Vehicle } from '.
  *  - markers.php?r=<type>-<marsh>-<W|A|B>-<name>[|<...>]
  *                                     — координаты машин, скорость, курс,
  *                                       прогнозы по остановкам (rasp)
- *  - m.nskgortrans.ru/index.php?m=..&tt=..&s=..&r=A — табло остановки (WAP)
+ *  - trasses.php?r=<тот же id>        — геометрия линии по улицам и остановки с id
+ *  - forecast.php?id=<id остановки>&type=platform — табло остановки (минуты)
  *
  * Особенности источника:
- *  - кириллица в WAP-табло приходит в cp1251;
+ *  - `type` в id маршрута — это `listmarsh.type + 1` (bus=1, trolley=2, tram=3,
+ *    minibus=8): именно такой префикс понимают markers.php и trasses.php;
  *  - время в time_nav бывает в трёх форматах: «ГГГГ-ММ-ДД чч:мм:сс»,
  *    «дд.мм.гг чч:мм:сс» и просто «чч:мм:сс» (тогда берём серверную дату);
  *  - статистическая остановка без движения (speed=0, rasp=«Обеденный перерыв»).
  */
 
 const NSK_BASE = 'https://map.nskgortrans.ru';
-const NSK_WAP = 'https://m.nskgortrans.ru';
 
 interface NskRouteGroup {
   type: number;
@@ -65,6 +65,20 @@ interface NskTracePoint {
   /** название остановки */
   n?: string;
   len?: string;
+}
+
+interface NskForecastRoute {
+  id_marsh: string;
+  title: string;
+  marsh: string;
+  typetr: string;
+  direction: string;
+  markers: { id: string; time: number }[];
+  stop_end?: string;
+}
+
+interface NskForecastResponse {
+  routes: NskForecastRoute[];
 }
 
 interface NskTrassesResponse {
@@ -214,15 +228,18 @@ export class NskProvider implements TransitProvider {
     return trace;
   }
 
+  /**
+   * Табло остановки — официальный `forecast.php?id=<id>&type=platform`.
+   * Ответ: `{routes: [{id_marsh, title, marsh, typetr, direction,
+   *                    markers: [{id, time}], stop_end}]}`, где `time` — минуты.
+   */
   async stopBoard(stop: Stop): Promise<StopBoard> {
-    // WAP-табло: m=<маршрут>&tt=<тип>&s=<остановка>&r=<направление>&p=1
-    // m=0 означает «все маршруты», tt — тип транспорта (1 автобус, 2 троллейбус…).
     if (!stop.sourceId) throw new Error('Нет идентификатора остановки');
-    const url = `${NSK_WAP}/index.php?m=0&tt=0&s=${encodeURIComponent(stop.sourceId)}&r=W&p=1`;
+    const url = `${NSK_BASE}/forecast.php?id=${encodeURIComponent(stop.sourceId)}&type=platform`;
     const res = await httpGet(withProxy(url), { timeoutMs: this.opts.timeoutMs });
     if (res.status !== 200) throw new Error(`stop board: HTTP ${res.status}`);
-    const html = decodeCp1251(res.text);
-    return parseNskStopBoard(html, stop);
+    const data = parseJsonLoose<NskForecastResponse>(res.text);
+    return parseNskForecast(data, stop);
   }
 }
 
@@ -287,45 +304,27 @@ function parseNskStops(raw: unknown): Stop[] {
 }
 
 /**
- * Разбор WAP-табло ЦУГАЭТ. Страница — старый XHTML без таблиц: строки идут
- * как «<маршрут> <время|минуты> <конечная>», поэтому разбираем текст.
- * Формат ячейки: «13 13:57 Ключ-Камышенское плато» или «13 4 мин …».
+ * Разбор `forecast.php`: на каждую машину-маршрут приходит свой список
+ * прогнозов в минутах. В табло показываем ближайшие прибытия по всем маршрутам.
  */
-export function parseNskStopBoard(html: string, stop: Stop): StopBoard {
+export function parseNskForecast(data: NskForecastResponse, stop: Stop): StopBoard {
   const entries: StopBoardEntry[] = [];
-  const seen = new Set<string>();
-  const text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, '\n')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&quot;/g, '"')
-    .replace(/&amp;/g, '&');
-
-  for (const raw of text.split('\n')) {
-    const line = raw.replace(/\s+/g, ' ').trim();
-    if (!line || line.length > 120) continue;
-    // «13 13:57 …» / «13 4 мин …» / «13к 4 минуты»
-    const m = /^([0-9]{1,3}[А-Яа-яA-Za-z]?)\s+(\d{1,2}:\d{2}|\d{1,3}\s*мин(?:ут[аы]?)?)\s*(.*)$/.exec(line);
-    if (!m) continue;
-    const routeNumber = m[1].toUpperCase();
-    const when = m[2];
-    const tail = m[3].trim();
-    const key = `${routeNumber}|${when}|${tail}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const isClock = /^\d{1,2}:\d{2}$/.test(when);
-    const minutes = isClock ? undefined : parseInt(when, 10);
-    entries.push({
-      routeNumber,
-      kind: /^[А-Яа-я]?т/.test(routeNumber) ? 'trolley' : 'bus',
-      minutes: minutes ?? 0,
-      time: isClock ? when : undefined,
-      label: tail || undefined,
-    });
-    if (entries.length >= 40) break;
+  for (const route of data.routes ?? []) {
+    const kind = kindFromNskType(Number(route.typetr) - 1);
+    const title = route.title || normRouteNumber(String(route.marsh));
+    for (const marker of route.markers ?? []) {
+      const minutes = Number(marker.time);
+      if (!Number.isFinite(minutes)) continue;
+      entries.push({
+        routeNumber: title,
+        kind,
+        minutes: Math.max(0, Math.round(minutes)),
+        label: route.stop_end || undefined,
+      });
+    }
   }
-  return { stopId: stop.id, stopName: stop.name, entries, fetchedAt: Date.now() };
+  entries.sort((a, b) => a.minutes - b.minutes);
+  return { stopId: stop.id, stopName: stop.name, entries: entries.slice(0, 30), fetchedAt: Date.now() };
 }
 
 export { PATH_NAMES };
