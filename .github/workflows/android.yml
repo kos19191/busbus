@@ -37,18 +37,58 @@ jobs:
           (cd web && npm run build:android)
           ls -la apk/app/src/main/assets/
 
-      - name: Build APK
+      - name: Build debug APK
         working-directory: apk
-        run: |
-          gradle --no-daemon assembleDebug --stacktrace
-          mkdir -p ../ci/apk
-          cp app/build/outputs/apk/debug/app-debug.apk ../ci/apk/busbus-debug.apk
-          cp app/build/outputs/apk/debug/app-debug.apk ../ci/apk/busbus.apk
+        run: gradle --no-daemon assembleDebug --stacktrace
 
-      - name: Sign info / size
+      - name: Build release APK
+        working-directory: apk
+        run: gradle --no-daemon assembleRelease --stacktrace
+
+      # Подпись: если в секретах репозитория лежит keystore — подписываем им,
+      # иначе release остаётся на debug-ключе (Android его устанавливает, но это
+      # не «магазинная» подпись — см. README).
+      - name: Sign release APK (keystore from secrets)
+        id: sign
+        continue-on-error: true
+        env:
+          KEYSTORE_B64: ${{ secrets.BUSBUS_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.BUSBUS_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.BUSBUS_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.BUSBUS_KEY_PASSWORD }}
         run: |
+          set -e
+          if [ -z "$KEYSTORE_B64" ]; then
+            echo "Секреты keystore не заданы — release подписан debug-ключом"
+            exit 0
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/busbus.jks"
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          UNSIGNED=apk/app/build/outputs/apk/release/app-release-unsigned.apk
+          test -f "$UNSIGNED" || UNSIGNED=apk/app/build/outputs/apk/release/app-release.apk
+          "$BT/zipalign" -f -p 4 "$UNSIGNED" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" sign --ks "$RUNNER_TEMP/busbus.jks" \
+            --ks-pass "pass:$KS_PASS" --key-pass "pass:$KEY_PASS" --ks-key-alias "$KEY_ALIAS" \
+            --out "$RUNNER_TEMP/busbus-release.apk" "$RUNNER_TEMP/aligned.apk"
+          "$BT/apksigner" verify --print-certs "$RUNNER_TEMP/busbus-release.apk"
+          cp "$RUNNER_TEMP/busbus-release.apk" ci/apk/busbus.apk
+
+      - name: Collect APKs
+        run: |
+          mkdir -p ci/apk
+          cp apk/app/build/outputs/apk/debug/app-debug.apk ci/apk/busbus-debug.apk
+          # если отдельной подписи не было — берём release-сборку (подписана debug-ключом)
+          if [ ! -s ci/apk/busbus.apk ]; then
+            REL=apk/app/build/outputs/apk/release/app-release.apk
+            test -f "$REL" || REL=apk/app/build/outputs/apk/release/app-release-unsigned.apk
+            cp "$REL" ci/apk/busbus.apk
+          fi
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          echo "--- release"
+          "$BT/aapt2" dump badging ci/apk/busbus.apk | head -2 || true
+          echo "--- debug"
+          "$BT/aapt2" dump badging ci/apk/busbus-debug.apk | head -2 || true
           ls -la ci/apk
-          du -h ci/apk/busbus.apk
 
       - name: Publish APK to ci/apk branch
         run: |
@@ -61,5 +101,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: busbus-apk
-          path: ci/apk/busbus.apk
+          path: |
+            ci/apk/busbus.apk
+            ci/apk/busbus-debug.apk
           retention-days: 30
