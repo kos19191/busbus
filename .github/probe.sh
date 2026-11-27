@@ -395,4 +395,43 @@ for v in variants:
             print('    row', cells[:6])
 PY
 
+say "CORS HEADERS"
+curl -sS -m 30 -D - -o /dev/null -H "Origin: https://example.github.io" "https://map.nskgortrans.ru/listmarsh.php?r" | head -20 || true
+echo "---"
+curl -sS -m 30 -D - -o /dev/null -H "Origin: https://example.github.io" "https://mu-kgt.ru/informing/wap/marsh/?m=85&action=getMarshData" | head -20 || true
+
+say "CORS PROXIES"
+TARGET="https://map.nskgortrans.ru/listmarsh.php%3Fr"
+for u in \
+  "https://api.allorigins.win/raw?url=$TARGET" \
+  "https://api.codetabs.com/v1/proxy?quest=$TARGET" \
+  "https://corsproxy.io/?$TARGET" \
+  "https://api.cors.lol/?url=$TARGET" \
+  "https://thingproxy.freeboard.io/fetch/https://map.nskgortrans.ru/listmarsh.php?r" \
+  "https://proxy.corsfix.com/?https://map.nskgortrans.ru/listmarsh.php?r" ; do
+  echo "=== $u"
+  curl -sS -m 25 -D /tmp/h.txt "$u" -o /tmp/b.txt || continue
+  echo "  status: $(head -1 /tmp/h.txt | tr -d '\r')"
+  echo "  acao: $(grep -i '^access-control-allow-origin' /tmp/h.txt | tr -d '\r' || echo none)"
+  echo "  bytes: $(wc -c < /tmp/b.txt)"
+  head -c 160 /tmp/b.txt; echo
+done
+
+say "KRK COORDS"
+curl -sS -m 30 "https://mu-kgt.ru/informing/wap/marsh/?m=85&action=getMarshData" -o krk.json || true
+python3 - <<'PY' || true
+import json
+d = json.load(open('krk.json', encoding='utf-8', errors='replace'))
+print('keys', list(d.keys()))
+d0 = d.get('directions', {})
+print('directions', list(d0.keys()))
+for k, v in d0.items():
+    print(' ', k, v)
+rows = d.get('ts_line', {})
+for k, v in rows.items():
+    print('ts_line', k, 'rows', len(v))
+    for r in v[:6]:
+        print('   ', r)
+PY
+
 say "DONE"
