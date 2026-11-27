@@ -9,12 +9,16 @@ import { writeFileSync, readFileSync } from 'node:fs';
 const src = readFileSync(new URL('../core/src/data/demo-lines.ts', import.meta.url), 'utf8');
 
 const lines = [];
-const re = /city:\s*'(\w+)',\s*kind:\s*'(\w+)',\s*number:\s*'([^']+)',[\s\S]*?points:\s*\[([\s\S]*?)\]/g;
-let m;
-while ((m = re.exec(src))) {
-  const [, city, kind, number, rawPoints] = m;
-  const points = [...rawPoints.matchAll(/\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]/g)].map((p) => [Number(p[1]), Number(p[2])]);
-  lines.push({ city, kind, number, points });
+// режем файл по объектам маршрутов, чтобы «жадный» regex не склеивал соседние
+const chunks = src.split(/\n  \{\n    city:/).slice(1);
+for (const chunk of chunks) {
+  const body = 'city:' + chunk;
+  const city = /city:\s*'(\w+)'/.exec(body)?.[1];
+  const kind = /kind:\s*'(\w+)'/.exec(body)?.[1];
+  const number = /number:\s*'([^']+)'/.exec(body)?.[1];
+  const pointsBlock = /points:\s*\[([\s\S]*?)\n    \]/.exec(body)?.[1] ?? '';
+  const points = [...pointsBlock.matchAll(/\[\s*([\d.]+)\s*,\s*([\d.]+)\s*\]/g)].map((p) => [Number(p[1]), Number(p[2])]);
+  if (city && kind && number && points.length) lines.push({ city, kind, number, points });
 }
 
 if (!lines.length) {
