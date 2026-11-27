@@ -237,7 +237,9 @@ export class DemoProvider implements TransitProvider {
       }
     }
     entries.sort((a, b) => a.minutes - b.minutes);
-    return { stopId: stop.id, stopName: stop.name, entries: entries.slice(0, 12), fetchedAt: Date.now() };
+    // на табло — только ближайший час: дальше это уже «следующий круг» и путает
+    const near = entries.filter((e) => e.minutes <= 60);
+    return { stopId: stop.id, stopName: stop.name, entries: (near.length ? near : entries).slice(0, 12), fetchedAt: Date.now() };
   }
 
   private cityMinutes(): number {

@@ -218,7 +218,7 @@ export class BusMap {
     // На мелком масштабе и при сотнях машин показываем только точку-стрелку,
     // иначе плашки перекрывают друг друга и город превращается в «кашу».
     const crowded = this.markers.size > 60 || this.pendingCount > 60;
-    const compact = this.map.getZoom() < 13 && crowded && !selected ? ' vehicle-marker--compact' : '';
+    const compact = this.map.getZoom() <= 12 && crowded && !selected ? ' vehicle-marker--compact' : '';
     return L.divIcon({
       className: '',
       html: `<div class="vehicle-marker${dim}${compact}${selected ? ' vehicle-marker--selected' : ''}" style="--marker-bg:${color}" data-id="${v.id}">${arrow}<span>${escapeHtml(v.routeNumber)}</span></div>`,
