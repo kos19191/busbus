@@ -236,10 +236,17 @@ export class DemoProvider implements TransitProvider {
         });
       }
     }
+    if (!entries.length) {
+      // на этой остановке ещё нет машин в демо-симуляции — покажем маршруты линии,
+      // чтобы экран не выглядел «пустым» и было понятно, что тут ходит
+      for (const line of this.lines) {
+        if (line.stops.some((s2) => s2.name.toLowerCase() === body)) {
+          entries.push({ routeNumber: line.number, kind: line.kind, minutes: 0, label: 'по расписанию' } as StopBoardEntry);
+        }
+      }
+    }
     entries.sort((a, b) => a.minutes - b.minutes);
-    // на табло — только ближайший час: дальше это уже «следующий круг» и путает
-    const near = entries.filter((e) => e.minutes <= 60);
-    return { stopId: stop.id, stopName: stop.name, entries: (near.length ? near : entries).slice(0, 12), fetchedAt: Date.now() };
+    return { stopId: stop.id, stopName: stop.name, entries: entries.slice(0, 12), fetchedAt: Date.now() };
   }
 
   private cityMinutes(): number {
