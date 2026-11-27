@@ -90,8 +90,9 @@ async function fromNskTrasses(line) {
   if (points.length < 2) throw new Error('нет точек');
 
   // trasses.php отдаёт оба направления одной ломаной («туда → обратно»).
-  // Режем на самом дальнем от начала отрезке, чтобы линия не рисовала петлю.
-  const cut = farthestTurn(points);
+  // Точка разворота — первая остановка, id которой уже встречался ранее
+  // (на обратном пути ЦУГАЭТ отдаёт те же id). Резерв — самая дальняя точка.
+  const cut = turnIndex(points, stops);
   const forward = points.slice(0, cut + 1);
   // прореживаем геометрию до ~300 точек, остановки сохраняем все
   const step = Math.max(1, Math.floor(forward.length / 300));
@@ -104,7 +105,17 @@ async function fromNskTrasses(line) {
   return { points: thinned, stops: near };
 }
 
-/** Индекс самой дальней от начала точки — там заканчивается первое направление. */
+/** Индекс начала обратного направления: первая повторная остановка. */
+function turnIndex(points, stops) {
+  const seen = new Set();
+  for (const stop of stops) {
+    if (seen.has(stop.id)) return Math.max(1, stop.at - 1);
+    seen.add(stop.id);
+  }
+  return farthestTurn(points);
+}
+
+/** Резерв: самая дальняя от начала точка ломаной. */
 function farthestTurn(points) {
   const [lat0, lon0] = points[0];
   let best = 0;
