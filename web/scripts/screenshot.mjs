@@ -70,15 +70,16 @@ const scenarios = [
         const tabs = [...document.querySelectorAll('.tabbar__btn')];
         if (tabs[2]) tabs[2].click();
       });
-      await page.waitForSelector('.sheet__body .row', { timeout: 20000 }).catch(() => {});
-      await new Promise((r) => setTimeout(r, 1200));
+      await page.waitForSelector('.sheet__body button.row', { timeout: 20000 }).catch(() => {});
+      await new Promise((r) => setTimeout(r, 1500));
       const opened = await page.evaluate(() => {
-        const row = [...document.querySelectorAll('.sheet__body .row')].find((el) => el.textContent?.includes('табло'));
+        const row = [...document.querySelectorAll('.sheet__body button.row')][0];
         if (!row) return false;
         row.click();
         return true;
       });
-      if (opened) await new Promise((r) => setTimeout(r, 2200));
+      if (!opened) console.log('board: кнопка остановки не найдена');
+      await new Promise((r) => setTimeout(r, 2500));
     },
   },
   {
