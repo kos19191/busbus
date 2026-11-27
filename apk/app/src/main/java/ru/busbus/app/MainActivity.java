@@ -34,8 +34,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.HashMap;
-import java.util.Map;
+import org.json.JSONObject;
+
 
 /**
  * BusBus для Android.
@@ -107,12 +107,6 @@ public class MainActivity extends AppCompatActivity {
                 if (url.startsWith(APP_ORIGIN)) {
                     return assetLoader.shouldInterceptRequest(request.getUrl());
                 }
-                String host = request.getUrl().getHost();
-                if (isTransitHost(host)) {
-                    // запрос с CORS-обёрткой, браузерный fetch не сумеет иначе
-                    WebResourceResponse proxy = proxyWithCors(url, request.getMethod());
-                    if (proxy != null) return proxy;
-                }
                 return super.shouldInterceptRequest(view, request);
             }
 
@@ -130,6 +124,8 @@ public class MainActivity extends AppCompatActivity {
                 return true;
             }
         });
+
+        webView.addJavascriptInterface(new NativeBridge(), "BusBusAndroid");
 
         webView.setWebChromeClient(new WebChromeClient() {
             @Override
@@ -196,53 +192,63 @@ public class MainActivity extends AppCompatActivity {
         return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n") + "\"";
     }
 
-    private boolean isTransitHost(String host) {
-        if (host == null) return false;
-        return host.equals("map.nskgortrans.ru")
-                || host.equals("m.nskgortrans.ru")
-                || host.equals("mu-kgt.ru")
-                || host.endsWith(".mu-kgt.ru");
-    }
-
     /**
-     * Прозрачный прокси: забираем ответ официального портала нативно и отдаём
-     * в WebView с заголовком Access-Control-Allow-Origin. Официальные API
-     * не отдают CORS, поэтому без этого живые данные в браузерном движке не работают.
+     * Нативный HTTP-мост для веб-ядра.
+     *
+     * Официальные порталы (map.nskgortrans.ru, mu-kgt.ru) не отдают CORS-заголовки,
+     * поэтому fetch внутри WebView для них блокируется. JS-ядро вызывает этот мост,
+     * получает JSON-конверт {"status":..,"text":..,"headers":{..}} и работает с ним
+     * так же, как с обычным fetch. Никаких посредников и прокси не нужно.
      */
-    private WebResourceResponse proxyWithCors(String url, String method) {
-        HttpURLConnection conn = null;
-        try {
-            conn = (HttpURLConnection) new URL(url).openConnection();
-            conn.setRequestMethod("GET");
-            conn.setConnectTimeout(15000);
-            conn.setReadTimeout(20000);
-            conn.setRequestProperty("Accept", "application/json, text/html, */*");
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android) BusBus/" + BuildConfig.VERSION_NAME);
-            conn.setInstanceFollowRedirects(true);
-            int code = conn.getResponseCode();
-            String contentType = conn.getContentType();
-            if (contentType == null) contentType = "application/json; charset=utf-8";
-            InputStream stream = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
-            if (stream == null) stream = new ByteArrayInputStream(new byte[0]);
-            Map<String, String> headers = new HashMap<>();
-            headers.put("Access-Control-Allow-Origin", "*");
-            headers.put("Access-Control-Allow-Methods", "GET, OPTIONS");
-            headers.put("Access-Control-Allow-Headers", "*");
-            headers.put("Cache-Control", "no-store");
-            String reason = code == 200 ? "OK" : ("HTTP " + code);
-            return new WebResourceResponse(contentType, "utf-8", code, reason, headers, stream);
-        } catch (IOException e) {
-            if (conn != null) conn.disconnect();
+    private class NativeBridge {
+        @android.webkit.JavascriptInterface
+        public String httpGet(String url) {
+            HttpURLConnection conn = null;
             try {
-                byte[] msg = ("{\"error\":\"" + e.getClass().getSimpleName().replace("\"", "") + "\"}").getBytes("UTF-8");
-                Map<String, String> headers = new HashMap<>();
-                headers.put("Access-Control-Allow-Origin", "*");
-                return new WebResourceResponse("application/json", "utf-8", 502, "Bad Gateway", headers,
-                        new ByteArrayInputStream(msg));
-            } catch (IOException ignored) {
-                return null;
+                if (url == null || !(url.startsWith("https://") || url.startsWith("http://"))) {
+                    return errorEnvelope("bad url");
+                }
+                conn = (HttpURLConnection) new URL(url).openConnection();
+                conn.setRequestMethod("GET");
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(25000);
+                conn.setInstanceFollowRedirects(true);
+                conn.setRequestProperty("Accept", "application/json, text/html, */*");
+                conn.setRequestProperty("Accept-Charset", "utf-8");
+                conn.setRequestProperty("User-Agent",
+                        "Mozilla/5.0 (Linux; Android " + Build.VERSION.RELEASE + ") BusBus/"
+                                + BuildConfig.VERSION_NAME);
+                int code = conn.getResponseCode();
+                InputStream stream = code >= 400 ? conn.getErrorStream() : conn.getInputStream();
+                String text = readAll(stream);
+                StringBuilder headers = new StringBuilder("{");
+                String ct = conn.getContentType();
+                if (ct != null) headers.append("\"content-type\":").append(JSONObject.quote(ct));
+                headers.append("}");
+                return "{\"status\":" + code + ",\"text\":" + JSONObject.quote(text)
+                        + ",\"headers\":" + headers + "}";
+            } catch (Exception e) {
+                return errorEnvelope(e.getClass().getSimpleName() + ": " + String.valueOf(e.getMessage()));
+            } finally {
+                if (conn != null) conn.disconnect();
             }
         }
+
+        private String errorEnvelope(String message) {
+            return "{\"status\":0,\"text\":\"\",\"headers\":{},\"error\":" + JSONObject.quote(message) + "}";
+        }
+    }
+
+    private static String readAll(InputStream stream) throws IOException {
+        if (stream == null) return "";
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[16384];
+        int n;
+        while ((n = stream.read(buf)) > 0) out.write(buf, 0, n);
+        stream.close();
+        // Источники отдают UTF-8 (Новосибирск) — декодируем как UTF-8;
+        // WAP-табло в cp1251 распознаётся в JS при необходимости.
+        return out.toString("UTF-8");
     }
 
     private boolean hasLocationPermission() {

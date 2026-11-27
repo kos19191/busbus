@@ -7,7 +7,7 @@ import { DemoProvider } from '../data/demo';
 export * from './types';
 export * from './provider';
 export * from './geo';
-export { httpGet, setHttpImpl, setProxy, getProxy, withProxy, DEFAULT_PROXY } from './http';
+export { httpGet, setHttpImpl, setProxy, getProxy, withProxy, DEFAULT_PROXY, installAndroidBridge } from './http';
 export type { HttpImpl, HttpRequest, HttpResponse, ProxyConfig } from './http';
 export { NskProvider, parseNskTime } from './nsk';
 export { KrskProvider, krkAllRoutes, parseKrskPayload, krkKindOf } from './krsk';

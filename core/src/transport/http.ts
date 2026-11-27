@@ -48,6 +48,27 @@ export function setHttpImpl(next: HttpImpl): void {
   impl = next;
 }
 
+/**
+ * Нативный мост Android (JavascriptInterface BusBusAndroid).
+ * Позволяет получать данные официальных порталов без CORS — обычный fetch
+ * внутри WebView для них блокируется. В браузере моста нет и всё работает как обычно.
+ */
+interface AndroidBridge {
+  httpGet?: (url: string) => string;
+}
+
+export function installAndroidBridge(): boolean {
+  const bridge = (globalThis as unknown as { BusBusAndroid?: AndroidBridge }).BusBusAndroid;
+  if (!bridge || typeof bridge.httpGet !== 'function') return false;
+  setHttpImpl(async (req) => {
+    const raw = bridge.httpGet!(req.url);
+    const envelope = JSON.parse(raw) as { status: number; text: string; headers?: Record<string, string>; error?: string };
+    if (envelope.error) throw new Error(envelope.error);
+    return { status: envelope.status, text: envelope.text ?? '', headers: envelope.headers ?? {} };
+  });
+  return true;
+}
+
 export async function httpGet(url: string, opts: Partial<HttpRequest> = {}): Promise<HttpResponse> {
   return impl({ ...opts, url, method: 'GET' });
 }
