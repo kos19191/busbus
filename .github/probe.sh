@@ -220,4 +220,53 @@ text = re.sub(r'<[^>]+>', ' ', html)
 print(re.sub(r'\s+', ' ', text)[:1200])
 PY
 
+say "NSK WAP BOARD REAL"
+for u in \
+  "https://m.nskgortrans.ru/index.php?m=13&tt=1&s=2133&r=A&p=1" \
+  "https://m.nskgortrans.ru/index.php?m=13&tt=1&s=2133" \
+  "https://m.nskgortrans.ru/index.php?m=13&tt=1" ; do
+  echo "=== $u"
+  curl -sS -m 30 "$u" -o wb.html || continue
+  wc -c wb.html
+  file -bi wb.html || true
+  python3 - <<'PY' || true
+import re, html
+raw = open('wb.html','rb').read()
+for enc in ('utf-8','cp1251'):
+    try:
+        txt = raw.decode(enc)
+        break
+    except Exception:
+        txt = None
+if txt is None:
+    print('decode fail'); raise SystemExit
+plain = re.sub(r'<script[\s\S]*?</script>', ' ', txt)
+plain = re.sub(r'<[^>]+>', '|', plain)
+plain = html.unescape(re.sub(r'\|+', '|', plain))
+print(re.sub(r'\s+', ' ', plain)[:1200])
+print('--- HREFS', sorted(set(re.findall(r'href="([^"]+)"', txt)))[:15])
+print('--- ROWS')
+for tr in re.findall(r'<tr[^>]*>([\s\S]*?)</tr>', txt)[:10]:
+    cells = [html.unescape(re.sub(r'<[^>]+>',' ',c)).strip() for c in re.findall(r'<td[^>]*>([\s\S]*?)</td>', tr)]
+    print(cells)
+PY
+done
+
+say "NSK WAP STOP SEARCH"
+for u in \
+  "https://m.nskgortrans.ru/index.php?t=3" \
+  "https://m.nskgortrans.ru/index.php?t=1" ; do
+  echo "=== $u"
+  curl -sS -m 30 "$u" -o wq.html || continue
+  python3 - <<'PY' || true
+import re, html
+raw = open('wq.html','rb').read()
+txt = raw.decode('utf-8', errors='replace')
+plain = re.sub(r'<[^>]+>', ' ', txt)
+print(re.sub(r'\s+', ' ', html.unescape(plain))[:900])
+print('--- FORMS', re.findall(r'<form[^>]*>', txt)[:4])
+print('--- SELECTS/OPTS', re.findall(r'<select[^>]*>', txt)[:4], re.findall(r'<option[^>]*value="([^"]*)"[^>]*>([^<]{0,25})', txt)[:12])
+PY
+done
+
 say "DONE"
