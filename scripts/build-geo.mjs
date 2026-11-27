@@ -61,12 +61,58 @@ async function fromNskTrasses(line) {
     }
   }
   if (points.length < 2) throw new Error('нет точек');
+
+  // trasses.php отдаёт оба направления одной ломаной («туда → обратно»).
+  // Режем на самом дальнем от начала отрезке, чтобы линия не рисовала петлю.
+  const cut = farthestTurn(points);
+  const forward = points.slice(0, cut + 1);
   // прореживаем геометрию до ~300 точек, остановки сохраняем все
-  const step = Math.max(1, Math.floor(points.length / 300));
-  const thinned = points.filter((_, i) => i % step === 0);
-  const last = points[points.length - 1];
+  const step = Math.max(1, Math.floor(forward.length / 300));
+  const thinned = forward.filter((_, i) => i % step === 0);
+  const last = forward[forward.length - 1];
   if (thinned[thinned.length - 1] !== last) thinned.push(last);
-  return { points: thinned, stops };
+
+  // оставляем только остановки первого направления (по близости к линии)
+  const near = stops.filter((st) => distToLine(forward, st) < 120);
+  return { points: thinned, stops: near };
+}
+
+/** Индекс самой дальней от начала точки — там заканчивается первое направление. */
+function farthestTurn(points) {
+  const [lat0, lon0] = points[0];
+  let best = 0;
+  let bestD = -1;
+  for (let i = 0; i < points.length; i++) {
+    const d = Math.hypot(points[i][0] - lat0, points[i][1] - lon0);
+    if (d > bestD) {
+      bestD = d;
+      best = i;
+    }
+  }
+  return best > 5 ? best : points.length - 1;
+}
+
+/** Минимальное расстояние от остановки до линии, метры. */
+function distToLine(line, stop) {
+  const kx = Math.cos((stop.lat * Math.PI) / 180) * 111_320;
+  const ky = 110_540;
+  let best = Infinity;
+  for (let i = 1; i < line.length; i++) {
+    const [aLat, aLon] = line[i - 1];
+    const [bLat, bLon] = line[i];
+    const ax = (aLon - stop.lon) * kx;
+    const ay = (aLat - stop.lat) * ky;
+    const bx = (bLon - stop.lon) * kx;
+    const by = (bLat - stop.lat) * ky;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+    const px = ax + dx * t;
+    const py = ay + dy * t;
+    best = Math.min(best, Math.hypot(px, py));
+  }
+  return best;
 }
 
 for (const line of lines) {

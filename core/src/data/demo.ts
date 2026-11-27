@@ -177,7 +177,8 @@ export class DemoProvider implements TransitProvider {
     for (const stop of line.stops) {
       const stopAlong = stop.t * total;
       const delta = dir === 1 ? stopAlong - along : along - stopAlong;
-      if (delta > 20) {
+      if (delta > 40) {
+        // delta — это метры вдоль линии (indexPolyline считает в метрах)
         const meters = delta;
         const minutes = Math.max(1, Math.round(meters / 1000 / 0.35)); // ~21 км/ч с остановками
         const target = nowMin + minutes;
