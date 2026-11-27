@@ -72,6 +72,14 @@ while read -r f; do
   grep -oE '[a-zA-Z_]+\.php' js.tmp | sort -u | head -40 || true
 done < nskjs.txt
 
+say "NSK MAIN JS"
+curl -sS -m 30 "https://map.nskgortrans.ru/js/main.1.3.min.js?_136" -o main.js || true
+cat main.js | head -c 4400 || true
+echo
+say "NSK MYQUERY JS"
+curl -sS -m 30 "https://map.nskgortrans.ru/js/myjquery.js?_11" -o myjq.js || true
+cat myjq.js | head -c 3600 || true
+echo
 say "NSK CONFIG JS"
 curl -sS -m 30 "https://map.nskgortrans.ru/js/config.js?_3" || true
 echo
