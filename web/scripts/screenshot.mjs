@@ -115,6 +115,10 @@ for (const sc of [...scenarios, ...(process.env.SHOT_LIVE ? [liveScenario] : [])
     if (m.type() === 'error' || m.type() === 'warning') logs.push(`[${m.type()}] ${m.text()}`);
   });
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
+  page.on('response', (res) => {
+    if (res.status() >= 400) logs.push(`[http ${res.status()}] ${res.url().slice(0, 140)}`);
+  });
+  page.on('requestfailed', (req) => logs.push(`[failed] ${req.url().slice(0, 140)} ${req.failure()?.errorText ?? ''}`));
   await page.setViewport(sc.viewport);
   // локальный снапшот живых данных (CI кладёт его рядом), иначе берём URL из настроек
   if (process.env.BUSBUS_SNAPSHOT_LOCAL) {
