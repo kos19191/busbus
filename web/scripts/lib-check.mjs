@@ -68,6 +68,14 @@ for (const city of only === 'all' ? ['nsk', 'krsk'] : [only]) {
       const board = await p.stopBoard(stop);
       log(board.entries.length > 0, `${city}: табло «${stop.name}» — ${board.entries.length} строк`);
       if (board.entries[0]) console.log('     ', JSON.stringify(board.entries[0]));
+      log(
+        board.entries.every((e) => e.routeNumber && /[А-Яа-яA-Za-z0-9]/.test(e.routeNumber)),
+        `${city}: номера маршрутов в табло читаемы`,
+      );
+      log(
+        trace.stops.every((st) => /[А-Яа-яЁё]/.test(st.name)),
+        `${city}: названия остановок на кириллице (${trace.stops[0]?.name})`,
+      );
     }
 
     if (city === 'krsk') {
