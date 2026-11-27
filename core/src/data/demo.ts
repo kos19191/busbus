@@ -221,8 +221,11 @@ export class DemoProvider implements TransitProvider {
       const idx = this.index(line);
       const stopAlong = lineStop.t * idx.total;
       for (const v of this.sim.filter((x) => x.line === line)) {
-        const delta = v.dir === 1 ? stopAlong - v.along : v.along - stopAlong;
-        if (delta < -30) continue;
+        let delta = v.dir === 1 ? stopAlong - v.along : v.along - stopAlong;
+        // остановка уже позади — машина вернётся на неё после разворота на конечной:
+        // путь до конца линии + путь от начала линии до остановки на обратном ходе
+        if (delta < 0) delta = idx.total - v.along + (idx.total - stopAlong);
+        if (delta < 0) continue;
         const minutes = Math.max(0, Math.round(delta / 1000 / 0.35));
         const target = nowMin + minutes;
         entries.push({

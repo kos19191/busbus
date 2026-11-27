@@ -40,6 +40,8 @@ export class BusMap {
   private raf = 0;
   private onVehicleClick?: (v: Vehicle) => void;
   private userMarker: L.Marker | null = null;
+  /** Сколько машин пришло в последнем кадре (нужно до отрисовки иконок) */
+  private pendingCount = 0;
 
   constructor(host: HTMLElement, opts: MapOptions) {
     const cfg = CITIES[opts.city];
@@ -169,6 +171,7 @@ export class BusMap {
 
   /** Обновить машины: плавное движение между обновлениями */
   setVehicles(vehicles: Vehicle[], selectedId?: string | null): void {
+    this.pendingCount = vehicles.length;
     const seen = new Set<string>();
     for (const v of vehicles) {
       if (!Number.isFinite(v.lat) || !Number.isFinite(v.lon)) continue;
@@ -212,9 +215,10 @@ export class BusMap {
         ? `<span class="vehicle-marker__arrow" data-arrow style="transform:rotate(${v.bearing}deg)">➤</span>`
         : '';
     const dim = v.status && /обед|отстой|перерыв/i.test(v.status) ? ' vehicle-marker--dim' : '';
-    // на мелком масштабе город целиком: показываем только точку-стрелку,
-    // номер маршрута возвращаем при приближении (иначе маркеры перекрывают друг друга)
-    const compact = this.map.getZoom() < 13 && !selected ? ' vehicle-marker--compact' : '';
+    // На мелком масштабе и при сотнях машин показываем только точку-стрелку,
+    // иначе плашки перекрывают друг друга и город превращается в «кашу».
+    const crowded = this.markers.size > 60 || this.pendingCount > 60;
+    const compact = this.map.getZoom() < 13 && crowded && !selected ? ' vehicle-marker--compact' : '';
     return L.divIcon({
       className: '',
       html: `<div class="vehicle-marker${dim}${compact}${selected ? ' vehicle-marker--selected' : ''}" style="--marker-bg:${color}" data-id="${v.id}">${arrow}<span>${escapeHtml(v.routeNumber)}</span></div>`,
