@@ -50,6 +50,22 @@ const scenarios = [
     },
   },
   {
+    name: 'mobile-stops',
+    viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+    steps: async (page) => {
+      await page.evaluate(() => {
+        const tabs = [...document.querySelectorAll('.tabbar__btn')];
+        if (tabs[2]) tabs[2].click();
+      });
+      await new Promise((r) => setTimeout(r, 500));
+      await page.evaluate(() => {
+        const rows = [...document.querySelectorAll('.stop-row, .row')];
+        rows.find((el) => !el.classList.contains('sheet__head'))?.click();
+      });
+      await new Promise((r) => setTimeout(r, 1200));
+    },
+  },
+  {
     name: 'mobile-settings',
     viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
     steps: async (page) => {

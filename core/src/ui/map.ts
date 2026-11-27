@@ -114,10 +114,19 @@ export class BusMap {
     this.fitLine(points);
   }
 
+  /**
+   * Вписать линию в видимую часть карты: на мобильном снизу лежит шторка,
+   * сверху — панель поиска, поэтому кадрируем с полями и сдвигом.
+   */
   private fitLine(points: [number, number][]): void {
     if (!points.length) return;
     const bounds = L.latLngBounds(points.map(([lat, lon]) => L.latLng(lat, lon)));
-    this.map.fitBounds(bounds.pad(0.18), { animate: true, maxZoom: 14 });
+    const size = this.map.getSize();
+    const top = 96;
+    const sheet = this.map.getContainer().closest('.app')?.querySelector('.sheet') as HTMLElement | null;
+    const bottom = sheet ? Math.min(sheet.getBoundingClientRect().height, size.y * 0.62) : 24;
+    const pad = { paddingTopLeft: L.point(24, top), paddingBottomRight: L.point(24, Math.max(24, bottom)) };
+    this.map.fitBounds(bounds, { ...pad, animate: true, maxZoom: 15 });
   }
 
   getRouteIndex(): PolylineIndex | null {
