@@ -356,4 +356,43 @@ for p in stops:
         print('RAWHEAD', txt[:600].replace('\n',' '))
 PY
 
+say "NSK FORECAST REAL IDS"
+python3 - <<'PY' || true
+import json, subprocess
+d = json.load(open('t13.json', encoding='utf-8', errors='replace'))
+u = d['trasses'][0]['r'][0]['u']
+ids = [p['id'] for p in u if p.get('id')][:3]
+print('ids', ids)
+for sid in ids:
+    for typ in ('platform', 'stop'):
+        url = f"https://map.nskgortrans.ru/forecast.php?id={sid}&type={typ}"
+        out = subprocess.run(['curl','-sS','-m','30',url], capture_output=True).stdout
+        print('===', sid, typ, len(out))
+        print(out[:1200].decode('utf-8', errors='replace'))
+PY
+
+say "NSK WAP STEP2"
+python3 - <<'PY' || true
+import subprocess, re
+base = "https://m.nskgortrans.ru/index.php"
+variants = [
+    "?m=13&t=0&tt=1&s=2133&r=A&p=1&v=1",
+    "?m=13&t=0&tt=1&s=2133&v=1&p=1",
+    "?m=13&tt=1&t=0&v=1",
+    "?tt=1&t=1",
+]
+for v in variants:
+    out = subprocess.run(['curl','-sS','-m','30',base+v], capture_output=True).stdout
+    txt = out.decode('utf-8', errors='replace')
+    forms = re.findall(r'<form[^>]*>', txt)
+    inputs = re.findall(r'<input[^>]*name="([^"]+)"[^>]*>', txt)
+    opts = re.findall(r'<option[^>]*value="([^"]*)"', txt)
+    rows = re.findall(r'<tr[^>]*>([\s\S]*?)</tr>', txt)
+    print('===', v, 'bytes', len(txt), 'forms', len(forms), 'inputs', inputs[:8], 'opts', len(opts), 'rows', len(rows))
+    if rows[:3]:
+        for r in rows[:3]:
+            cells = [re.sub(r'<[^>]+>','',c).strip() for c in re.findall(r'<td[^>]*>([\s\S]*?)</td>', r)]
+            print('    row', cells[:6])
+PY
+
 say "DONE"
