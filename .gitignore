@@ -14,3 +14,6 @@ apk/local.properties
 *.log
 .idea/
 .vscode/
+
+# диагностика билдера геометрии (пишется в CI)
+scripts/.geo-debug.json

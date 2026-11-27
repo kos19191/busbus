@@ -24,6 +24,7 @@ jobs:
           git config user.name "Arena Agent"
           git config user.email "agent@arena.ai"
           git add core/src/data/demo-geo.json
+          git add -f scripts/.geo-debug.json
           git diff --cached --quiet && echo "без изменений" && exit 0
           git commit -m "data: demo route geometry from OSRM"
           git push origin HEAD:refs/heads/ci/geo --force

@@ -11,6 +11,8 @@
  */
 import { writeFileSync, readFileSync } from 'node:fs';
 
+const debug = [];
+
 const src = readFileSync(new URL('../core/src/data/demo-lines.ts', import.meta.url), 'utf8');
 
 const lines = [];
@@ -89,6 +91,14 @@ async function fromNskTrasses(line) {
   }
   if (points.length < 2) throw new Error('нет точек');
 
+  debug.push({
+    route: `${line.city}:${line.kind}:${line.number}`,
+    branches: branches.length,
+    rawPoints: points.length,
+    stops: stops.length,
+    stopSeq: stops.slice(0, 6).map((s) => `${s.at}:${s.id}:${s.name}`),
+  });
+
   // trasses.php отдаёт оба направления одной ломаной («туда → обратно»).
   // Точка разворота — первая остановка, id которой уже встречался ранее
   // (на обратном пути ЦУГАЭТ отдаёт те же id). Резерв — самая дальняя точка.
@@ -102,7 +112,21 @@ async function fromNskTrasses(line) {
 
   // оставляем только остановки первого направления (до точки разворота)
   const near = stops.filter((st) => st.at <= cut).map(({ at, ...rest }) => rest);
+  debug[debug.length - 1].cut = cut;
+  debug[debug.length - 1].kmForward = +(km(forward)).toFixed(2);
+  debug[debug.length - 1].kmAll = +(km(points)).toFixed(2);
   return { points: thinned, stops: near };
+}
+
+/** Длина ломаной, км. */
+function km(points) {
+  let sum = 0;
+  for (let i = 1; i < points.length; i++) {
+    const dLat = (points[i][0] - points[i - 1][0]) * 110.54;
+    const dLon = (points[i][1] - points[i - 1][1]) * 111.32 * Math.cos((points[i][0] * Math.PI) / 180);
+    sum += Math.hypot(dLat, dLon);
+  }
+  return sum;
 }
 
 /** Индекс начала обратного направления: первая повторная остановка. */
@@ -168,4 +192,6 @@ for (const line of lines) {
 }
 
 writeFileSync(new URL('../core/src/data/demo-geo.json', import.meta.url), JSON.stringify(out, null, 1));
+writeFileSync(new URL('../scripts/.geo-debug.json', import.meta.url), JSON.stringify(debug, null, 1));
+console.log(JSON.stringify(debug, null, 1));
 console.log('Записано:', Object.keys(out).length, 'маршрутов');
