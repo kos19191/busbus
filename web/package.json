@@ -1,16 +1,22 @@
 {
-  "name": "web",
+  "name": "busbus-web",
   "version": "1.0.0",
-  "description": "",
+  "description": "BusBus — веб-версия и PWA (GitHub Pages)",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "vite",
+    "build": "vite build",
+    "build:android": "cross-env BUSBUS_SINGLE=1 vite build",
+    "preview": "vite preview --host 0.0.0.0 --port 4173",
+    "typecheck": "tsc --noEmit",
+    "shots": "node ./scripts/screenshot.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "devDependencies": {
     "@types/leaflet": "^1.9.23",
+    "cross-env": "^7.0.3",
     "typescript": "^5.9.3",
     "vite": "^5.4.21",
     "vite-plugin-singlefile": "^2.3.4"
@@ -18,5 +24,7 @@
   "dependencies": {
     "leaflet": "^1.9.4",
     "leaflet.heat": "^0.2.0"
-  }
+  },
+  "private": true,
+  "type": "module"
 }
