@@ -76,12 +76,29 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
-      - name: Build single-file bundle and APK
+      - name: Install deps
         run: |
-          (cd core && npm ci --no-audit --no-fund)
-          (cd web && npm ci --no-audit --no-fund && npm run build:android)
-          (cd apk && gradle --no-daemon assembleDebug)
+          (cd core && npm ci --no-audit --no-fund) 2>&1 | tee -a build.log
+          (cd web && npm ci --no-audit --no-fund) 2>&1 | tee -a build.log
+      - name: Build single-file bundle
+        run: |
+          (cd web && npm run build:android) 2>&1 | tee -a build.log
+          ls -la apk/app/src/main/assets | tee -a build.log
+      - name: Assemble APK
+        run: |
+          (cd apk && gradle --no-daemon assembleDebug --stacktrace) 2>&1 | tee -a build.log
           cp apk/app/build/outputs/apk/debug/app-debug.apk /tmp/busbus-debug.apk
+          ls -la /tmp/busbus-debug.apk | tee -a build.log
+      - name: Publish build log
+        if: always()
+        run: |
+          mkdir -p ci/device
+          cp build.log ci/device/build.log 2>/dev/null || echo "no build log" > ci/device/build.log
+          git config user.name "Arena Agent"
+          git config user.email "agent@arena.ai"
+          git add -f ci/device/build.log
+          git commit -m "ci: emulator build log" || true
+          git push origin HEAD:refs/heads/ci/device --force || true
       - name: Install app on emulator and take screenshots
         uses: reactivecircus/android-emulator-runner@v2
         with:
