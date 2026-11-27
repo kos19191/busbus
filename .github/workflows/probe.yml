@@ -12,30 +12,40 @@ jobs:
         run: curl -sS -m 30 -D - -o /dev/null "https://ru.busti.me/api/v1/datasources/" || true
       - name: Headers OSM tiles
         run: curl -sS -m 30 -D - -o /dev/null -A "BusBus/1.0 (contact: test@example.com)" "https://tile.openstreetmap.org/13/5982/2590.png" || true
-      - name: KRK full page + js
+      - name: KRK full page
         run: |
-          curl -sS -m 60 "https://mu-kgt.ru/informing/" -o page.html || true
-          echo "--- size:"; wc -c page.html
-          echo "--- js refs:"; grep -oE '(src|href)="[^"]+"' page.html | sort -u | head -60
-          echo "--- action refs in page:"; grep -oE 'action=[A-Za-z_]+' page.html | sort -u | head -40
+          curl -sS -m 60 "https://mu-kgt.ru/informing/" -o page.html
+          wc -c page.html
+          grep -oE '(src|href)="[^"]+"' page.html | sort -u | head -60
+          grep -oE 'action=[A-Za-z_]+' page.html | sort -u | head -40
       - name: KRK js scan
         run: |
-          for f in $(grep -oE 'src="[^"]+\.js[^"]*"' page.html | sed 's/src="//;s/"$//' | sort -u); do
-            echo "=== $f"; curl -sS -m 60 "https://mu-kgt.ru$f" -o js.tmp || continue; wc -c js.tmp
+          grep -oE 'src="[^"]+\.js[^"]*"' page.html | sed 's/src="//;s/"$//' | sort -u > jslist.txt
+          cat jslist.txt
+          while read -r f; do
+            echo "=== $f"
+            curl -sS -m 60 "https://mu-kgt.ru$f" -o js.tmp
+            wc -c js.tmp
             grep -oE 'action=[A-Za-z_]+' js.tmp | sort -u | head -30
-            grep -oE '(url|ajax)[^;]{0,120}' js.tmp | head -30
-          done
+            grep -oE 'url[^;]{0,120}' js.tmp | head -30
+          done < jslist.txt
       - name: NSK minibus + stop board
         run: |
-          echo "--- minibus 29:"; curl -sS -m 30 "https://map.nskgortrans.ru/markers.php?r=8-29-W-29" | head -c 600; echo
-          echo "--- grasp stops:"; curl -sS -m 30 "https://map.nskgortrans.ru/components/com_planrasp/helpers/grasp.php?q=%D0%92%D0%BE%D0%BA%D0%B7%D0%B0%D0%BB&typeview=stops" | head -c 800; echo
-          echo "--- mobile stop board:"; curl -sS -m 30 "https://m.nskgortrans.ru/index.php?m=8&t=2&tt=1&s=0&r=A&p=1" | head -c 800; echo
+          curl -sS -m 30 "https://map.nskgortrans.ru/markers.php?r=8-29-W-29" | head -c 600
+          echo
+          curl -sS -m 30 "https://map.nskgortrans.ru/components/com_planrasp/helpers/grasp.php?q=%D0%92%D0%BE%D0%BA%D0%B7%D0%B0%D0%BB&typeview=stops" | head -c 800
+          echo
+          curl -sS -m 30 "https://m.nskgortrans.ru/index.php?m=8&t=2&tt=1&s=0&r=A&p=1" | head -c 800
       - name: busti api
         run: |
-          for u in "https://ru.busti.me/api/v1/datasources/" "https://ru.busti.me/api/v1/routes/?city_id=1"; do echo "=== $u"; curl -sS -m 30 "$u" | head -c 1000; echo; done
+          curl -sS -m 30 "https://ru.busti.me/api/v1/datasources/" | head -c 1000
+          echo
+          curl -sS -m 30 "https://ru.busti.me/api/v1/routes/?city_id=1" | head -c 1000
       - name: overpass test
         run: |
           curl -sS -m 120 -G "https://overpass-api.de/api/interpreter" --data-urlencode 'data=[out:json][timeout:60];node(55.0,82.9,55.02,82.93)[public_transport=platform];out 3;' | head -c 800
       - name: proxies
         run: |
-          for u in "https://api.codetabs.com/v1/proxy?quest=https://map.nskgortrans.ru/markers.php?r%3D1-8-W-8" "https://api.allorigins.win/raw?url=https%3A%2F%2Fmap.nskgortrans.ru%2Fmarkers.php%3Fr%3D1-8-W-8" "https://corsproxy.io/?https://map.nskgortrans.ru/markers.php?r=1-8-W-8"; do echo "=== $u"; curl -sS -m 40 -D - "$u" | head -c 500; echo; done
+          curl -sS -m 40 -D - "https://api.codetabs.com/v1/proxy?quest=https://map.nskgortrans.ru/markers.php?r%3D1-8-W-8" | head -c 700
+          echo
+          curl -sS -m 40 -D - "https://api.allorigins.win/raw?url=https%3A%2F%2Fmap.nskgortrans.ru%2Fmarkers.php%3Fr%3D1-8-W-8" | head -c 700
