@@ -39,9 +39,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p web/dist
-          # API отдаёт base64 с переносами строк — снимаем их перед декодированием
-          gh api "repos/${{ github.repository }}/contents/ci/apk/busbus.apk?ref=ci/apk" --jq '.content' \
-            | tr -d '\n' | base64 -d > web/dist/busbus.apk
+          # 5 МБ > лимита contents API на base64, поэтому забираем файл как raw
+          gh api -H "Accept: application/vnd.github.raw" \
+            "repos/${{ github.repository }}/contents/ci/apk/busbus.apk?ref=ci/apk" > web/dist/busbus.apk
           test -s web/dist/busbus.apk || { echo "APK не скачался"; exit 1; }
           ls -la web/dist/busbus.apk
       # Резервный канал: даже если GitHub Pages в репозитории не включён,
