@@ -121,6 +121,8 @@ for (const city of ['nsk', 'krsk']) {
   try {
     const data = await snapshot(city);
     result.cities[city] = data;
+    // Отдельный файл на город: веб-версия тянет только нужный, а не оба сразу
+    writeFileSync(path.join(outDir, `${city}.json`), JSON.stringify({ at: result.at, cities: { [city]: data } }));
     console.log(
       `${city}: маршрутов ${data.routes.length}, машин ${data.vehicles.length}, ` +
         `остановок ${data.stops.length}, табло ${Object.keys(data.boards).length}`,

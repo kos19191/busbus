@@ -48,6 +48,6 @@ jobs:
           git config user.name "Arena Agent"
           git config user.email "agent@arena.ai"
           test -s data/live/snapshot.json || { echo "снапшот пуст"; exit 1; }
-          git add -f data/live/snapshot.json
+          git add -f data/live/snapshot.json data/live/nsk.json data/live/krsk.json
           git commit -m "data: live snapshot $(date -u +%H:%M)"
           git push origin HEAD:refs/heads/ci/live --force

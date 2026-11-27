@@ -46,29 +46,33 @@ export interface Snapshot {
 }
 
 /** URL снапшота: можно переопределить (свой хостинг или локальная разработка). */
-export function snapshotUrl(): string {
+export function snapshotUrl(city?: CityId): string {
   const custom = (globalThis as unknown as { BUSBUS_SNAPSHOT_URL?: string }).BUSBUS_SNAPSHOT_URL;
-  if (custom) return custom;
-  return 'https://raw.githubusercontent.com/kos19191/busbus/ci/live/data/live/snapshot.json';
+  if (custom) return city ? custom.replace('{city}', city) : custom;
+  const base = 'https://raw.githubusercontent.com/kos19191/busbus/ci/live/data/live';
+  return city ? `${base}/${city}.json` : `${base}/snapshot.json`;
 }
 
-let cache: { at: number; data: Snapshot } | null = null;
-let inflight: Promise<Snapshot> | null = null;
+const cache = new Map<string, { at: number; data: Snapshot }>();
+const inflight = new Map<string, Promise<Snapshot>>();
 
-export async function loadSnapshot(force = false): Promise<Snapshot> {
-  if (!force && cache && Date.now() - cache.at < 8 * 60_000) return cache.data;
-  if (!inflight) {
-    inflight = (async () => {
-      const res = await httpGet(snapshotUrl(), { timeoutMs: 20000 });
-      if (res.status !== 200) throw new Error(`снапшот: HTTP ${res.status}`);
-      const data = JSON.parse(res.text) as Snapshot;
-      cache = { at: Date.now(), data };
-      return data;
-    })().finally(() => {
-      inflight = null;
-    });
-  }
-  return inflight;
+export async function loadSnapshot(city?: CityId, force = false): Promise<Snapshot> {
+  const key = city ?? 'all';
+  const hit = cache.get(key);
+  if (!force && hit && Date.now() - hit.at < 8 * 60_000) return hit.data;
+  const pending = inflight.get(key);
+  if (pending) return pending;
+  const task = (async () => {
+    const res = await httpGet(snapshotUrl(city), { timeoutMs: 20000 });
+    if (res.status !== 200) throw new Error(`снапшот: HTTP ${res.status}`);
+    const data = JSON.parse(res.text) as Snapshot;
+    cache.set(key, { at: Date.now(), data });
+    return data;
+  })().finally(() => {
+    inflight.delete(key);
+  });
+  inflight.set(key, task);
+  return task;
 }
 
 export class SnapshotProvider implements TransitProvider {
@@ -84,7 +88,7 @@ export class SnapshotProvider implements TransitProvider {
   }
 
   private async cityData(): Promise<SnapshotCity> {
-    const snapshot = await loadSnapshot();
+    const snapshot = await loadSnapshot(this.city);
     const data = snapshot.cities[this.city];
     if (!data) throw new Error('снапшот города пуст — повторим позже');
     this.data = data;
