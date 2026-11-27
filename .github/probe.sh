@@ -27,11 +27,22 @@ cat jslist.txt || true
 while read -r f; do
   test -n "$f" || continue
   echo "=== $f"
-  curl -sS -m 60 "https://mu-kgt.ru$f" -o js.tmp || continue
+  curl -sS -m 60 "https://mu-kgt.ru/$f" -o js.tmp || continue
   wc -c < js.tmp
   grep -oE 'action=[A-Za-z_]+' js.tmp | sort -u | head -40 || true
   grep -oE 'https?://[^"'"'"' ]+' js.tmp | sort -u | head -20 || true
 done < jslist.txt
+
+say "TOOLCHAIN"
+java -version 2>&1 | head -3 || true
+gradle -v 2>&1 | sed -n '1,12p' || true
+ls "$ANDROID_HOME" 2>/dev/null || true
+ls "$ANDROID_SDK_ROOT" 2>/dev/null || true
+echo "--- build-tools:"; ls "$ANDROID_HOME/build-tools" 2>/dev/null || true
+echo "--- platforms:"; ls "$ANDROID_HOME/platforms" 2>/dev/null || true
+echo "--- cmdline-tools:"; ls "$ANDROID_HOME/cmdline-tools" 2>/dev/null || true
+echo "--- node:"; node -v || true
+python3 -c "import yaml, sys" 2>&1 || true
 
 say "NSK MINIBUS"
 curl -sS -m 30 "https://map.nskgortrans.ru/markers.php?r=8-29-W-29" | head -c 700 || true
