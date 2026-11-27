@@ -1,0 +1,51 @@
+[
+  {
+    "name": "mobile-map",
+    "title": "BusBus — транспорт онлайн",
+    "markers": 15,
+    "tabs": 4,
+    "logs": []
+  },
+  {
+    "name": "mobile-route",
+    "title": "BusBus — транспорт онлайн",
+    "markers": 4,
+    "tabs": 4,
+    "logs": []
+  },
+  {
+    "name": "mobile-stops",
+    "title": "BusBus — транспорт онлайн",
+    "markers": 15,
+    "tabs": 4,
+    "logs": []
+  },
+  {
+    "name": "mobile-board",
+    "title": "BusBus — транспорт онлайн",
+    "markers": 15,
+    "tabs": 4,
+    "logs": []
+  },
+  {
+    "name": "mobile-settings",
+    "title": "BusBus — транспорт онлайн",
+    "markers": 15,
+    "tabs": 4,
+    "logs": []
+  },
+  {
+    "name": "desktop-map",
+    "title": "BusBus — транспорт онлайн",
+    "markers": 15,
+    "tabs": 4,
+    "logs": []
+  },
+  {
+    "name": "mobile-live",
+    "title": "BusBus — транспорт онлайн",
+    "markers": 521,
+    "tabs": 4,
+    "logs": []
+  }
+]
