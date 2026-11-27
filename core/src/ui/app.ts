@@ -577,6 +577,8 @@ export class BusApp {
   }
 
   private renderStopsPanel(): HTMLElement[] {
+    // табло выбранной остановки показываем вместо списка
+    if (this.board) return this.renderBoardPanel();
     const s = this.store.get();
     const body = h('div', { class: 'sheet__body' });
     const stops = this.busesStops.filter((st) => !this.selected.query || st.name.toLowerCase().includes(this.selected.query.toLowerCase()));
