@@ -1,17 +1,17 @@
 /**
- * Собирает реальную геометрию демо-маршрутов и сохраняет её в
- * core/src/data/demo-geo.json.
+ * Собирает реальную геометрию демо-маршрутов в core/src/data/demo-geo.json.
  *
- * Источники:
- *  1. Новосибирск — официальный trasses.php ЦУГАЭТ: настоящая линия по улицам
- *     и остановки с id (без внешних сервисов).
- *  2. Остальные города — публичный OSRM по опорным точкам из demo-lines.ts.
+ * Новосибирск: порядок остановок и их координаты берём из trasses.php ЦУГАЭТ
+ * (это официальный список остановок маршрута), а линию прокладываем по улицам
+ * через публичный OSRM — сама ломаная из trasses.php содержит оба направления
+ * и нулевые пробеги, поэтому для отрисовки она не годится.
  *
- * Запуск: node scripts/build-geo.mjs   (нужен интернет; запускается в CI)
+ * Красноярск: OSRM по опорным точкам из demo-lines.ts (источник геометрии
+ * не отдаёт вовсе).
+ *
+ * Запуск: node scripts/build-geo.mjs   (нужен интернет; выполняется в CI)
  */
 import { writeFileSync, readFileSync } from 'node:fs';
-
-const debug = [];
 
 const src = readFileSync(new URL('../core/src/data/demo-lines.ts', import.meta.url), 'utf8');
 
@@ -34,14 +34,12 @@ if (!lines.length) {
 }
 
 const out = {};
+const debug = [];
 
-/**
- * NSK: id маршрута у ЦУГАЭТ — `<type+1>-<marsh>-W-<name>`.
- * type 0 — автобус, 1 — троллейбус, 2 — трамвай; в trasses.php нумерация с 1.
- */
+/** NSK: type у ЦУГАЭТ — это `listmarsh.type + 1` (bus=1, trolley=2, tram=3, minibus=8). */
 const NSK_TYPE = { bus: 1, trolley: 2, tram: 3, minibus: 8 };
 
-/** Справочник маршрутов ЦУГАЭТ: `<type>-<marsh>-W-<name>`, где marsh — внутренний id. */
+/** Справочник маршрутов: `<type>:<номер>` → internal marsh id. */
 async function nskRouteIds() {
   const res = await fetch('https://map.nskgortrans.ru/listmarsh.php?r', {
     headers: { 'User-Agent': 'BusBus/1.0 (demo geometry builder)' },
@@ -58,140 +56,91 @@ async function nskRouteIds() {
 
 let NSK_IDS = null;
 
-async function fromNskTrasses(line) {
+/** Остановки маршрута по порядку (только прямое направление). */
+async function nskStops(line) {
   const type = NSK_TYPE[line.kind];
-  if (!type) return null;
+  if (!type) throw new Error('неизвестный тип транспорта');
   if (!NSK_IDS) NSK_IDS = await nskRouteIds();
   const marsh = NSK_IDS.get(`${type}:${line.number}`);
   if (!marsh) throw new Error(`маршрут не найден в справочнике (type ${type})`);
   const id = `${type}-${marsh}-W-${line.number}`;
   const url = `https://map.nskgortrans.ru/trasses.php?r=${encodeURIComponent(id)}`;
   const res = await fetch(url, { headers: { 'User-Agent': 'BusBus/1.0 (demo geometry builder)' } });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`trasses: HTTP ${res.status}`);
   const data = await res.json();
   const branches = data.trasses?.[0]?.r ?? [];
-  const points = [];
   const stops = [];
   for (const branch of branches) {
     for (const p of branch.u ?? []) {
       const lat = Number(p.lat);
       const lon = Number(p.lng);
-      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
-      if (p.id && p.n) {
-        stops.push({
-          id: String(p.id),
-          name: String(p.n).replace(/\s+/g, ' ').trim(),
-          lat,
-          lon,
-          at: points.length,
-        });
-      }
-      points.push([+lat.toFixed(6), +lon.toFixed(6)]);
+      if (!p.id || !p.n || !Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      const id2 = String(p.id);
+      // обратное направление начинается с повторной остановки
+      if (stops.some((s) => s.id === id2)) return dedupe(stops);
+      stops.push({ id: id2, name: String(p.n).replace(/\s+/g, ' ').trim(), lat, lon });
     }
   }
-  if (points.length < 2) throw new Error('нет точек');
-
-  debug.push({
-    route: `${line.city}:${line.kind}:${line.number}`,
-    branches: branches.length,
-    rawPoints: points.length,
-    stops: stops.length,
-    stopSeq: stops.slice(0, 6).map((s) => `${s.at}:${s.id}:${s.name}`),
-  });
-
-  // trasses.php отдаёт оба направления одной ломаной («туда → обратно»).
-  // Точка разворота — первая остановка, id которой уже встречался ранее
-  // (на обратном пути ЦУГАЭТ отдаёт те же id). Резерв — самая дальняя точка.
-  const cut = turnIndex(points, stops);
-  const forward = points.slice(0, cut + 1);
-  // прореживаем геометрию до ~300 точек, остановки сохраняем все
-  const step = Math.max(1, Math.floor(forward.length / 300));
-  const thinned = forward.filter((_, i) => i % step === 0);
-  const last = forward[forward.length - 1];
-  if (thinned[thinned.length - 1] !== last) thinned.push(last);
-
-  // оставляем только остановки первого направления (до точки разворота)
-  const near = stops.filter((st) => st.at <= cut).map(({ at, ...rest }) => rest);
-  debug[debug.length - 1].cut = cut;
-  debug[debug.length - 1].kmForward = +(km(forward)).toFixed(2);
-  debug[debug.length - 1].kmAll = +(km(points)).toFixed(2);
-  return { points: thinned, stops: near };
+  return dedupe(stops);
 }
 
-/** Длина ломаной, км. */
-function km(points) {
-  let sum = 0;
-  for (let i = 1; i < points.length; i++) {
-    const dLat = (points[i][0] - points[i - 1][0]) * 110.54;
-    const dLon = (points[i][1] - points[i - 1][1]) * 111.32 * Math.cos((points[i][0] * Math.PI) / 180);
-    sum += Math.hypot(dLat, dLon);
-  }
-  return sum;
-}
-
-/** Индекс начала обратного направления: первая повторная остановка. */
-function turnIndex(points, stops) {
+function dedupe(stops) {
   const seen = new Set();
-  for (const stop of stops) {
-    if (seen.has(stop.id)) return Math.max(1, stop.at - 1);
-    seen.add(stop.id);
-  }
-  return farthestTurn(points);
+  return stops.filter((s) => (seen.has(s.id) ? false : (seen.add(s.id), true)));
 }
 
-/** Резерв: самая дальняя от начала точка ломаной. */
-function farthestTurn(points) {
-  const [lat0, lon0] = points[0];
-  let best = 0;
-  let bestD = -1;
-  for (let i = 0; i < points.length; i++) {
-    const d = Math.hypot(points[i][0] - lat0, points[i][1] - lon0);
-    if (d > bestD) {
-      bestD = d;
-      best = i;
-    }
-  }
-  return best > 5 ? best : points.length - 1;
+/** OSRM по опорным точкам [lat, lon] → ломаная по улицам с ~300 точками. */
+async function osrm(points, max = 300) {
+  if (points.length < 2) throw new Error('мало точек');
+  // ограничиваем число waypoints, чтобы не упереться в длину URL
+  const step = Math.max(1, Math.ceil((points.length - 2) / 22));
+  const way = points.filter((_, i) => i % step === 0 || i === points.length - 1);
+  const coords = way.map(([lat, lon]) => `${lon.toFixed(6)},${lat.toFixed(6)}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'BusBus/1.0 (demo geometry builder)' } });
+  if (!res.ok) throw new Error(`OSRM HTTP ${res.status}`);
+  const data = await res.json();
+  const raw = data.routes?.[0]?.geometry?.coordinates;
+  if (!raw?.length) throw new Error('нет геометрии');
+  const stride = Math.max(1, Math.floor(raw.length / max));
+  const pts = [];
+  for (let i = 0; i < raw.length; i += stride) pts.push([+raw[i][1].toFixed(6), +raw[i][0].toFixed(6)]);
+  const last = raw[raw.length - 1];
+  pts.push([+last[1].toFixed(6), +last[0].toFixed(6)]);
+  return { points: pts, km: +(data.routes[0].distance / 1000).toFixed(1) };
 }
-
 
 for (const line of lines) {
   const key = `${line.city}:${line.kind}:${line.number}`;
+  let anchor = line.points;
+  let stops;
+
   if (line.city === 'nsk') {
     try {
-      const trace = await fromNskTrasses(line);
-      out[key] = trace.points;
-      out[`${key}:stops`] = trace.stops;
-      console.log(`${key}: ${trace.points.length} точек, ${trace.stops.length} остановок (trasses.php)`);
+      stops = await nskStops(line);
+      if (stops.length > 3) anchor = stops.map((s) => [s.lat, s.lon]);
+      debug.push({ route: key, sourceStops: stops?.length ?? 0, first: stops?.[0]?.name, last: stops?.at(-1)?.name });
     } catch (e) {
-      console.log(`${key}: trasses не ответил (${e.message}) — пробуем OSRM`);
+      debug.push({ route: key, sourceStops: 0, error: e.message });
     }
     await new Promise((r) => setTimeout(r, 300));
-    if (out[key]) continue;
   }
-  const coords = line.points.map(([lat, lon]) => `${lon},${lat}`).join(';');
-  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+
   try {
-    const res = await fetch(url, { headers: { 'User-Agent': 'BusBus/1.0 (demo geometry builder)' } });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-    const route = data.routes?.[0];
-    if (!route?.geometry?.coordinates?.length) throw new Error('нет геометрии');
-    const raw = route.geometry.coordinates;
-    const step = Math.max(1, Math.floor(raw.length / 250));
-    const pts = [];
-    for (let i = 0; i < raw.length; i += step) pts.push([+raw[i][1].toFixed(6), +raw[i][0].toFixed(6)]);
-    const last = raw[raw.length - 1];
-    pts.push([+last[1].toFixed(6), +last[0].toFixed(6)]);
-    out[key] = pts;
-    console.log(`${key}: ${pts.length} точек, ${(route.distance / 1000).toFixed(1)} км`);
+    const geo = await osrm(anchor);
+    out[key] = geo.points;
+    if (stops?.length > 1) {
+      out[`${key}:stops`] = stops.map(({ id, name, lat, lon }) => ({ id, name, lat, lon }));
+    }
+    debug.push({ route: key, km: geo.km, points: geo.points.length, stops: stops?.length ?? 0 });
+    console.log(`${key}: ${geo.points.length} точек, ${geo.km} км, остановок ${stops?.length ?? 0}`);
   } catch (e) {
-    console.log(`${key}: не удалось (${e.message}) — останется прямая линия`);
+    console.log(`${key}: не удалось (${e.message}) — останется схема из demo-lines.ts`);
+    debug.push({ route: key, error: e.message });
   }
   await new Promise((r) => setTimeout(r, 600));
 }
 
 writeFileSync(new URL('../core/src/data/demo-geo.json', import.meta.url), JSON.stringify(out, null, 1));
 writeFileSync(new URL('../scripts/.geo-debug.json', import.meta.url), JSON.stringify(debug, null, 1));
-console.log(JSON.stringify(debug, null, 1));
-console.log('Записано:', Object.keys(out).length, 'маршрутов');
+console.log('Записано:', Object.keys(out).filter((k) => !k.endsWith(':stops')).length, 'маршрутов');
