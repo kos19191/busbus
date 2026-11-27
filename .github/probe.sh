@@ -192,4 +192,32 @@ for m in re.findall(r'href="([^"]*index\.php[^"]*)"', html)[:25]:
     print(m)
 PY
 
+say "NSK PREFIX MATRIX"
+for r in "1-3-W-3" "0-3-W-3" "1-13-W-13" "1-8-W-8" "2-8-W-8" "3-13-W-13" "8-29-W-29"; do
+  echo "=== markers r=$r"
+  curl -sS -m 30 "https://map.nskgortrans.ru/markers.php?r=$r" | head -c 700 || true
+  echo
+  echo "=== trasses r=$r"
+  curl -sS -m 30 "https://map.nskgortrans.ru/trasses.php?r=$r" | head -c 700 || true
+  echo
+done
+
+say "NSK WAP DEEP"
+curl -sS -m 30 "https://m.nskgortrans.ru/index.php?t=2" -o wap2.html || true
+python3 - <<'PY' || true
+import re
+html = open('wap2.html', 'rb').read().decode('cp1251', errors='replace')
+print('LEN', len(html))
+links = sorted(set(re.findall(r'href="([^"]+)"', html)))
+print('LINKS', links[:40])
+sel = re.findall(r'<select[^>]*name="([^"]+)"[\s\S]{0,400}?</select>', html)
+print('SELECTS', sel)
+opts = re.findall(r'<option[^>]*value="([^"]*)"[^>]*>([^<]{0,40})', html)
+print('OPTS', len(opts), opts[:15])
+print('FORMS', re.findall(r'<form[^>]*>', html)[:6])
+print('---TEXT---')
+text = re.sub(r'<[^>]+>', ' ', html)
+print(re.sub(r'\s+', ' ', text)[:1200])
+PY
+
 say "DONE"
