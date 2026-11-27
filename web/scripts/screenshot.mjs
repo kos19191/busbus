@@ -53,16 +53,32 @@ const scenarios = [
     name: 'mobile-stops',
     viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
     steps: async (page) => {
+      // вкладка «Остановки» — список подгружается сам
       await page.evaluate(() => {
         const tabs = [...document.querySelectorAll('.tabbar__btn')];
         if (tabs[2]) tabs[2].click();
       });
-      await new Promise((r) => setTimeout(r, 500));
+      await page.waitForSelector('.sheet__body .row', { timeout: 20000 }).catch(() => {});
+      await new Promise((r) => setTimeout(r, 1600));
+    },
+  },
+  {
+    name: 'mobile-board',
+    viewport: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+    steps: async (page) => {
       await page.evaluate(() => {
-        const rows = [...document.querySelectorAll('.stop-row, .row')];
-        rows.find((el) => !el.classList.contains('sheet__head'))?.click();
+        const tabs = [...document.querySelectorAll('.tabbar__btn')];
+        if (tabs[2]) tabs[2].click();
       });
+      await page.waitForSelector('.sheet__body .row', { timeout: 20000 }).catch(() => {});
       await new Promise((r) => setTimeout(r, 1200));
+      const opened = await page.evaluate(() => {
+        const row = [...document.querySelectorAll('.sheet__body .row')].find((el) => el.textContent?.includes('табло'));
+        if (!row) return false;
+        row.click();
+        return true;
+      });
+      if (opened) await new Promise((r) => setTimeout(r, 2200));
     },
   },
   {
