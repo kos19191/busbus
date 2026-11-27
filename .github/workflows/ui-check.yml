@@ -51,23 +51,3 @@ jobs:
           git commit -m "ci: ui screenshots" || true
           git push origin HEAD:refs/heads/ci/shots --force
 
-      - name: Live mode smoke test
-        continue-on-error: true
-        working-directory: web
-        env:
-          SHOT_URL: http://127.0.0.1:4173/
-          OUT_DIR: ../ci/live
-          LIVE_PROXY: ${{ vars.LIVE_PROXY }}
-        run: |
-          npx vite preview --outDir dist --port 4173 --host 127.0.0.1 &
-          sleep 4
-          node ./scripts/live-check.mjs
-
-      - name: Publish live report
-        continue-on-error: true
-        run: |
-          git config user.name "Arena Agent"
-          git config user.email "agent@arena.ai"
-          git add -f ci/live/* || true
-          git commit -m "ci: live mode report" || true
-          git push origin HEAD:refs/heads/ci/shots --force

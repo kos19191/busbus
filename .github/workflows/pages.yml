@@ -33,18 +33,15 @@ jobs:
         run: |
           (cd core && npm ci --no-audit --no-fund)
           (cd web && npm ci --no-audit --no-fund && npm run build)
-      - name: Fetch latest APK for download link
+      - name: Attach latest APK (if published by android workflow)
         continue-on-error: true
-        run: |
-          mkdir -p web/dist
-          for branch in ci/shots ci/apk; do
-            if gh api "repos/${{ github.repository }}/contents/ci/apk/busbus.apk?ref=$branch" --jq '.content' 2>/dev/null | base64 -d > web/dist/busbus.apk; then
-              echo "APK получен из ветки $branch"; break
-            fi
-          done
-          ls -la web/dist/busbus.apk || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p web/dist
+          gh api "repos/${{ github.repository }}/contents/ci/apk/busbus.apk?ref=ci/shots" --jq '.content' \
+            | base64 -d > web/dist/busbus.apk
+          ls -la web/dist/busbus.apk
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

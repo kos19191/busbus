@@ -55,6 +55,18 @@ export function setHttpImpl(next: HttpImpl): void {
  */
 interface AndroidBridge {
   httpGet?: (url: string) => string;
+  /** Список ближайших остановок (есть в нативной части, использует локальный каталог) */
+  nearbyStops?: (lat: number, lon: number, limit: number) => string;
+}
+
+/** Тип моста для UI-слоя: проверка возможностей без импорта Android-кода */
+export type BridgeFeature = 'http' | 'nearby';
+
+export function hasBridgeFeature(feature: BridgeFeature): boolean {
+  const bridge = (globalThis as unknown as { BusBusAndroid?: AndroidBridge }).BusBusAndroid;
+  if (!bridge) return false;
+  if (feature === 'http') return typeof bridge.httpGet === 'function';
+  return typeof bridge.nearbyStops === 'function';
 }
 
 export function installAndroidBridge(): boolean {

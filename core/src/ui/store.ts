@@ -18,9 +18,15 @@ export interface Settings {
 
 const KEY = 'busbus.settings.v1';
 
+function defaultMode(): DataMode {
+  // В APK есть нативный HTTP-мост, поэтому живой режим там основной.
+  const hasBridge = typeof (globalThis as unknown as { BusBusAndroid?: unknown }).BusBusAndroid !== 'undefined';
+  return hasBridge ? 'live' : 'demo';
+}
+
 const DEFAULTS: Settings = {
   city: 'nsk',
-  mode: 'demo',
+  mode: defaultMode(),
   theme: 'dark',
   units: 'metric',
   proxyEnabled: false,
