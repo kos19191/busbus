@@ -3,6 +3,9 @@ import type { TransitProvider } from './provider';
 import { NskProvider } from './nsk';
 import { KrskProvider } from './krsk';
 import { DemoProvider } from '../data/demo';
+import { SnapshotProvider } from './snapshot';
+import { isNativeHttp } from './http';
+import { demoLinesFor } from '../data/demo-lines';
 
 export * from './types';
 export * from './provider';
@@ -23,6 +26,8 @@ export { NskProvider, parseNskTime, parseNskTrace, parseNskForecast } from './ns
 export { KrskProvider, krkAllRoutes, parseKrskPayload, krkKindOf } from './krsk';
 export type { KrskParsedRoute, KrskParsedVehicle } from './krsk';
 export { DemoProvider } from '../data/demo';
+export { SnapshotProvider, loadSnapshot, snapshotUrl } from './snapshot';
+export type { Snapshot, SnapshotCity } from './snapshot';
 export { DEMO_LINES, demoLinesFor, demoLineFor } from '../data/demo-lines';
 export type { DemoLine } from '../data/demo-lines';
 
@@ -35,6 +40,12 @@ const demos = new Map<string, DemoProvider>();
 
 /** Фабрика провайдеров: живой источник либо демо-симуляция для выбранного города. */
 export function createProvider(city: CityId, mode: DataMode): TransitProvider {
+  if (mode === 'live' && !isNativeHttp() && typeof fetch === 'function') {
+    // В браузере источники недоступны напрямую (нет CORS) — читаем снапшот CI.
+    const snapshot = new SnapshotProvider(city);
+    for (const line of demoLinesFor(city)) snapshot.setLine(`${line.kind}:${line.number}`, line.points);
+    return snapshot;
+  }
   if (mode === 'demo') {
     const key = `${city}`;
     let p = demos.get(key);
@@ -44,6 +55,11 @@ export function createProvider(city: CityId, mode: DataMode): TransitProvider {
     }
     return p;
   }
+  return city === 'nsk' ? new NskProvider() : new KrskProvider();
+}
+
+/** Прямой живой источник (без снапшота) — для фонового собирателя данных в CI. */
+export function createLiveProvider(city: CityId): TransitProvider {
   return city === 'nsk' ? new NskProvider() : new KrskProvider();
 }
 

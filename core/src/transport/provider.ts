@@ -16,6 +16,9 @@ export interface TransitProvider {
   /** Положение машин на маршруте (± направление в источнике) */
   vehicles(route: Route, direction?: string): Promise<Vehicle[]>;
 
+  /** Пакетный запрос по нескольким маршрутам (если источник умеет) */
+  vehiclesMany?(routes: Route[], direction?: string): Promise<Vehicle[]>;
+
   /** Прогноз прибытия на остановку (если провайдер умеет) */
   stopBoard?(stop: Stop): Promise<StopBoard>;
 

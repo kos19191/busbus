@@ -17,3 +17,6 @@ apk/local.properties
 
 # диагностика билдера геометрии (пишется в CI)
 scripts/.geo-debug.json
+
+data/live/
+scripts/.snapshot-*

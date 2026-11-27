@@ -1,0 +1,53 @@
+name: live-snapshot
+
+# Веб-версии нужны данные, а источники не отдают CORS. Снимаем срез каждые
+# 10 минут и публикуем его в ветку `ci/live` (raw.githubusercontent отдаёт
+# access-control-allow-origin: *, поэтому браузер читает JSON напрямую).
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [arena/e840c013-busbus]
+    paths:
+      - 'scripts/snapshot.mjs'
+      - 'core/src/transport/**'
+      - '.github/workflows/live.yml'
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: live-snapshot
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install core deps
+        working-directory: core
+        run: npm ci --no-audit --no-fund
+
+      - name: Install web deps (esbuild for bundling)
+        working-directory: web
+        run: npm ci --no-audit --no-fund
+
+      - name: Build live snapshot
+        run: node scripts/snapshot.mjs
+
+      - name: Publish to ci/live
+        run: |
+          git config user.name "Arena Agent"
+          git config user.email "agent@arena.ai"
+          test -s data/live/snapshot.json || { echo "снапшот пуст"; exit 1; }
+          git add -f data/live/snapshot.json
+          git commit -m "data: live snapshot $(date -u +%H:%M)"
+          git push origin HEAD:refs/heads/ci/live --force
