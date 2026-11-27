@@ -37,8 +37,10 @@ const { createProvider } = await import('file://' + outfile);
 
 const only = process.argv[2] || 'nsk';
 const results = [];
+const lines = [];
 function log(ok, msg) {
   results.push({ ok, msg });
+  lines.push(`${ok ? 'PASS' : 'FAIL'} ${msg}`);
   console.log(`${ok ? 'PASS' : 'FAIL'} ${msg}`);
 }
 
@@ -93,4 +95,16 @@ fs.rmSync(outfile, { force: true });
 
 const failed = results.filter((r) => !r.ok);
 console.log(`\n${results.length - failed.length}/${results.length} ok`);
+
+// отчёт кладём рядом со скриншотами — логи Actions из песочницы не читаются
+const out = path.resolve(root, 'ci', 'shots');
+try {
+  fs.mkdirSync(out, { recursive: true });
+  fs.writeFileSync(
+    path.join(out, 'live-check.txt'),
+    [`Битые источники: ${results.length - failed.length}/${results.length}`, '', ...lines, ''].join('\n'),
+    'utf8',
+  );
+} catch {}
+
 process.exit(failed.length ? 1 : 0);

@@ -52,7 +52,7 @@ jobs:
         run: |
           git config user.name "Arena Agent"
           git config user.email "agent@arena.ai"
-          git add -f ci/shots/*.png ci/shots/index.html || true
+          git add -f ci/shots/*.png ci/shots/index.html ci/shots/live-check.txt ci/shots/report.json || true
           git commit -m "ci: ui screenshots" || true
           git push origin HEAD:refs/heads/ci/shots --force
 
