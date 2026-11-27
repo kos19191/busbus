@@ -1,35 +1,33 @@
-/// <reference lib="webworker" />
 /**
- * Сервис-воркер BusBus: офлайн-оболочка + быстрый старт.
- * Стратегия: сеть с фолбэком в кэш (данные всегда свежие, интерфейс доступен офлайн).
+ * Сервис-воркер BusBus (отдаётся как статический файл из public/).
+ * Стратегия: сеть с фолбэком в кэш. Данные транспорта и тайлы карты не кэшируются.
  */
-const sw = self as unknown as ServiceWorkerGlobalScope;
-const VERSION = '__VERSION__';
-const CACHE = `busbus-${VERSION}`;
+const CACHE = 'busbus-v1';
 const SHELL = ['./', './index.html'];
 
-sw.addEventListener('install', (event) => {
+self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(SHELL).catch(() => undefined)).then(() => sw.skipWaiting()),
+    caches
+      .open(CACHE)
+      .then((cache) => cache.addAll(SHELL).catch(() => undefined))
+      .then(() => self.skipWaiting()),
   );
 });
 
-sw.addEventListener('activate', (event) => {
+self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
       .then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))))
-      .then(() => sw.clients.claim()),
+      .then(() => self.clients.claim()),
   );
 });
 
-sw.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', (event) => {
   const req = event.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
-  // Данные транспорта и тайлы карты не кэшируем — нужны свежими
   if (/markers\.php|listmarsh\.php|getMarshData|tile\.openstreetmap/.test(url.href)) return;
-
   event.respondWith(
     fetch(req)
       .then((res) => {

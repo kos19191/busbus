@@ -21,7 +21,7 @@ const KEY = 'busbus.settings.v1';
 const DEFAULTS: Settings = {
   city: 'nsk',
   mode: 'demo',
-  theme: 'auto',
+  theme: 'dark',
   units: 'metric',
   proxyEnabled: false,
   proxyTemplate: 'https://api.allorigins.win/raw?url={url}',

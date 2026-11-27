@@ -17,3 +17,17 @@
     max-height: 78vh;
   }
 }
+
+/* Свёрнутая панель на вкладке «Карта»: только заголовок */
+.sheet--collapsed {
+  max-height: none;
+}
+
+.sheet--collapsed .sheet__body {
+  display: none;
+}
+
+.sheet--collapsed .sheet__head {
+  padding-bottom: 12px;
+  cursor: pointer;
+}

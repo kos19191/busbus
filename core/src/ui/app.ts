@@ -47,6 +47,8 @@ export class BusApp {
   private pollTimer: number | null = null;
   private board: StopBoard | null = null;
   private overview: Vehicle[] = [];
+  /** Панель свёрнута до заголовка — больше карты */
+  private collapsed = true;
   private busesStops: Stop[] = [];
   private refs: {
     root: HTMLElement;
@@ -118,6 +120,7 @@ export class BusApp {
 
   selectRoute(route: Route): void {
     this.tab = 'map';
+    this.collapsed = false;
     this.renderTabbar();
     this.selected = { ...this.selected, route, vehicles: [], selectedVehicleId: null, status: 'loading', stop: null };
     this.store.pushRecent(route.id);
@@ -135,6 +138,7 @@ export class BusApp {
   }
 
   selectVehicle(id: string | null, fromMap = false): void {
+    if (id) this.collapsed = false;
     this.selected = { ...this.selected, selectedVehicleId: id };
     this.map.selectVehicle(id);
     const v = this.selected.vehicles.find((x) => x.id === id);
@@ -211,6 +215,12 @@ export class BusApp {
     }
   }
 
+  /** Установить город из ссылки (?city=krsk) до монтирования. */
+  setCityFromUrl(city: CityId): void {
+    if (city === this.store.get().city) return;
+    this.store.set({ city });
+  }
+
   // ---------- топбар ----------
 
   private renderTopbar(): void {
@@ -285,9 +295,9 @@ export class BusApp {
             type: 'button',
             onClick: () => {
               this.tab = t.id;
+              if (t.id === 'map') this.collapsed = true;
               this.renderTabbar();
               this.renderSheet();
-              if (t.id === 'map') this.refs?.sheet.classList.remove('sheet--compact');
             },
           },
           h('span', { class: 'tabbar__icon' }, t.icon),
@@ -300,6 +310,7 @@ export class BusApp {
   renderSheet(): void {
     if (!this.refs) return;
     clear(this.refs.sheet);
+    this.refs.sheet.classList.toggle('sheet--collapsed', this.collapsed && this.tab === 'map');
     this.refs.sheet.append(h('div', { class: 'sheet__grip' }));
     switch (this.tab) {
       case 'map':
@@ -317,6 +328,25 @@ export class BusApp {
     }
   }
 
+  private toggleSheet(): void {
+    this.collapsed = !this.collapsed;
+    this.renderSheet();
+  }
+
+  private collapseButton(): HTMLElement {
+    return h(
+      'button',
+      {
+        class: 'icon-btn',
+        type: 'button',
+        'aria-label': this.collapsed ? 'Развернуть панель' : 'Свернуть панель',
+        title: this.collapsed ? 'Развернуть' : 'Свернуть',
+        onClick: () => this.toggleSheet(),
+      },
+      this.collapsed ? '⌃' : '⌄',
+    );
+  }
+
   private renderMapPanel(): HTMLElement[] {
     const parts: HTMLElement[] = [];
     const selVehicle = this.selected.vehicles.find((v) => v.id === this.selected.selectedVehicleId);
@@ -327,6 +357,7 @@ export class BusApp {
           { class: 'sheet__head' },
           h('div', { class: 'row__grow' }, h('h2', { class: 'sheet__title' }, `Маршрут ${selVehicle.routeNumber}`), h('div', { class: 'sheet__sub' }, KIND_LABEL[selVehicle.kind])),
           h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Закрыть', onClick: () => this.selectVehicle(null) }, '✕'),
+          this.collapseButton(),
         ),
       );
       parts.push(h('div', { class: 'sheet__body' }, vehicleDetails(selVehicle)));
@@ -368,10 +399,12 @@ export class BusApp {
     parts.push(
       h(
         'div',
-        { class: 'sheet__head' },
+        { class: 'sheet__head', onClick: () => this.toggleSheet() },
         h('div', { class: 'row__grow' }, h('h2', { class: 'sheet__title' }, `Транспорт · ${cfg.title}`), h('div', { class: 'sheet__sub' }, s.mode === 'demo' ? 'демонстрационные данные' : cfg.sourceNote)),
+        this.collapseButton(),
       ),
     );
+    if (this.collapsed) return parts;
     const body = h('div', { class: 'sheet__body' });
     if (s.mode === 'demo' && s.showDemoNotice) {
       body.append(demoBanner(() => {

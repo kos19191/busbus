@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="busbus_background">#0E1116</color>
+    <color name="busbus_accent">#34D399</color>
+    <color name="busbus_icon_background">#12241D</color>
+</resources>
