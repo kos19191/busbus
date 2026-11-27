@@ -39,7 +39,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p web/dist
-          gh api "repos/${{ github.repository }}/contents/ci/apk/busbus.apk?ref=ci/shots" --jq '.content' \
+          gh api "repos/${{ github.repository }}/contents/ci/apk/busbus.apk?ref=ci/apk" --jq '.content' \
             | base64 -d > web/dist/busbus.apk
           ls -la web/dist/busbus.apk
       - uses: actions/configure-pages@v5

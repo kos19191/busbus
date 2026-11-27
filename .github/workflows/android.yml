@@ -50,13 +50,13 @@ jobs:
           ls -la ci/apk
           du -h ci/apk/busbus.apk
 
-      - name: Publish APK to ci/shots branch
+      - name: Publish APK to ci/apk branch
         run: |
           git config user.name "Arena Agent"
           git config user.email "agent@arena.ai"
           git add -f ci/apk/busbus.apk ci/apk/busbus-debug.apk
           git commit -m "ci: apk $(date -u +%F-%H%M)" || true
-          git push origin HEAD:refs/heads/ci/shots --force
+          git push origin HEAD:refs/heads/ci/apk --force
 
       - uses: actions/upload-artifact@v4
         with:
