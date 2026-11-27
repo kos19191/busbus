@@ -119,13 +119,22 @@ for (const sc of [...scenarios, ...(process.env.SHOT_LIVE ? [liveScenario] : [])
   // локальный снапшот живых данных (CI кладёт его рядом), иначе берём URL из настроек
   if (process.env.BUSBUS_SNAPSHOT_LOCAL) {
     await page.setRequestInterception(true);
-    page.on('request', (req) => {
-      if (req.url().includes('raw.githubusercontent.com') && req.url().endsWith('.json')) {
-        const body = readFileSync(process.env.BUSBUS_SNAPSHOT_LOCAL, 'utf8');
-        req.respond({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body });
-        return;
+    page.on('request', async (req) => {
+      try {
+        if (req.url().includes('raw.githubusercontent.com') && req.url().endsWith('.json')) {
+          const body = readFileSync(process.env.BUSBUS_SNAPSHOT_LOCAL, 'utf8');
+          const headers = { 'access-control-allow-origin': '*', 'content-type': 'application/json' };
+          if (req.method() === 'OPTIONS') {
+            await req.respond({ status: 204, headers: { ...headers, 'access-control-allow-headers': '*' } });
+          } else {
+            await req.respond({ status: 200, headers, body });
+          }
+          return;
+        }
+        await req.continue();
+      } catch (e) {
+        logs.push(`[route] ${e.message}`);
       }
-      req.continue();
     });
   }
   if (sc.init) await page.evaluateOnNewDocument(sc.init);
