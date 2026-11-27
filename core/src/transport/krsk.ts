@@ -1,4 +1,5 @@
 import { httpGet, withProxy } from './http';
+import { realGeoFor } from '../data/demo-lines';
 import type { ProviderOptions, TransitProvider } from './provider';
 import { hhmmToMinutes, minutesUntil, parseJsonLoose } from './provider';
 import type { Arrival, Route, Stop, StopBoard, StopBoardEntry, TransportKind, Vehicle } from './types';
@@ -236,13 +237,15 @@ export class KrskProvider implements TransitProvider {
   }
 
   /**
-   * Координат машины нет — строим позицию «в очереди» по линии маршрута:
-   * ставим машину в точку остановки, перед которой она едет (или на которой стоит).
-   * Если линия маршрута неизвестна, отдаём пустой список — UI покажет табло.
+   * Координат машины у источника нет — есть только позиция в очереди остановок.
+   * Поэтому раскладываем машины вдоль линии маршрута: геометрию берём из
+   * демо-данных города (реальные улицы), а если её нет — из координат остановок
+   * маршрута, которые приходят в том же ответе.
    */
   async vehicles(route: Route, _direction?: string): Promise<Vehicle[]> {
     const parsed = await this.fetchRaw(route);
-    return this.vehiclesFromParsed(parsed, route, []);
+    const line = krkLineFor(route, parsed);
+    return this.vehiclesFromParsed(parsed, route, line);
   }
 
   vehiclesFromParsed(parsed: KrskParsedRoute, route: Route, line: [number, number][]): Vehicle[] {
@@ -286,6 +289,21 @@ export class KrskProvider implements TransitProvider {
 }
 
 /** Точка на линии для k-й остановки из total (доля вдоль линии) */
+/**
+ * Линия маршрута для раскладки машин: сначала готовая геометрия демо-линий,
+ * затем координаты остановок из ответа источника.
+ */
+export function krkLineFor(route: Route, parsed: KrskParsedRoute): [number, number][] {
+  const geo = realGeoFor(route.city, route.number, route.kind);
+  if (geo && geo.length > 1) return geo;
+  const ordered = Object.values(parsed.stops)[0] ?? [];
+  const pts = ordered
+    .map((stop) => (stop as unknown as { lat?: number; lon?: number }))
+    .filter((p): p is { lat: number; lon: number } => Number.isFinite(p?.lat) && Number.isFinite(p?.lon))
+    .map((p) => [p.lat, p.lon] as [number, number]);
+  return pts.length > 1 ? pts : [];
+}
+
 export function lineAtStopShare(line: [number, number][], index: number, total: number): [number, number] | undefined {
   if (!line.length) return undefined;
   const t = total > 1 ? Math.min(1, Math.max(0, index / (total - 1))) : 0;
