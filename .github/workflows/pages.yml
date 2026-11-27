@@ -54,8 +54,8 @@ jobs:
           touch /tmp/pwa/.nojekyll
           cd /tmp/pwa
           git init -q -b main .
-          git add -A
-          git commit -qm "build: PWA ${{ github.sha }}"
+          git -c user.name="Arena Agent" -c user.email="agent@arena.ai" add -A
+          git -c user.name="Arena Agent" -c user.email="agent@arena.ai" commit -qm "build: PWA ${{ github.sha }}"
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}" HEAD:refs/heads/ci/pages
 
       - uses: actions/configure-pages@v5
