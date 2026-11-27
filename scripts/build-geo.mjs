@@ -1,8 +1,13 @@
 /**
- * Прокладывает демо-маршруты по реальным улицам через публичный OSRM
- * и сохраняет геометрию в core/src/data/demo-geo.json.
+ * Собирает реальную геометрию демо-маршрутов и сохраняет её в
+ * core/src/data/demo-geo.json.
  *
- * Запуск: node scripts/build-geo.mjs   (нужен интернет; в песочнице нет — запускается в CI)
+ * Источники:
+ *  1. Новосибирск — официальный trasses.php ЦУГАЭТ: настоящая линия по улицам
+ *     и остановки с id (без внешних сервисов).
+ *  2. Остальные города — публичный OSRM по опорным точкам из demo-lines.ts.
+ *
+ * Запуск: node scripts/build-geo.mjs   (нужен интернет; запускается в CI)
  */
 import { writeFileSync, readFileSync } from 'node:fs';
 
@@ -27,8 +32,57 @@ if (!lines.length) {
 }
 
 const out = {};
+
+/**
+ * NSK: id маршрута у ЦУГАЭТ — `<type+1>-<marsh>-W-<name>`.
+ * type 0 — автобус, 1 — троллейбус, 2 — трамвай; в trasses.php нумерация с 1.
+ */
+const NSK_TYPE = { bus: 1, trolley: 2, tram: 3, minibus: 8 };
+
+async function fromNskTrasses(line) {
+  const type = NSK_TYPE[line.kind];
+  if (!type) return null;
+  const id = `${type}-${line.number}-W-${line.number}`;
+  const url = `https://map.nskgortrans.ru/trasses.php?r=${encodeURIComponent(id)}`;
+  const res = await fetch(url, { headers: { 'User-Agent': 'BusBus/1.0 (demo geometry builder)' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  const branches = data.trasses?.[0]?.r ?? [];
+  const points = [];
+  const stops = [];
+  for (const branch of branches) {
+    for (const p of branch.u ?? []) {
+      const lat = Number(p.lat);
+      const lon = Number(p.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) continue;
+      points.push([+lat.toFixed(6), +lon.toFixed(6)]);
+      if (p.id && p.n)
+        stops.push({ id: String(p.id), name: String(p.n).replace(/\s+/g, ' ').trim(), lat, lon });
+    }
+  }
+  if (points.length < 2) throw new Error('нет точек');
+  // прореживаем геометрию до ~300 точек, остановки сохраняем все
+  const step = Math.max(1, Math.floor(points.length / 300));
+  const thinned = points.filter((_, i) => i % step === 0);
+  const last = points[points.length - 1];
+  if (thinned[thinned.length - 1] !== last) thinned.push(last);
+  return { points: thinned, stops };
+}
+
 for (const line of lines) {
   const key = `${line.city}:${line.kind}:${line.number}`;
+  if (line.city === 'nsk') {
+    try {
+      const trace = await fromNskTrasses(line);
+      out[key] = trace.points;
+      out[`${key}:stops`] = trace.stops;
+      console.log(`${key}: ${trace.points.length} точек, ${trace.stops.length} остановок (trasses.php)`);
+    } catch (e) {
+      console.log(`${key}: trasses не ответил (${e.message}) — пробуем OSRM`);
+    }
+    await new Promise((r) => setTimeout(r, 300));
+    if (out[key]) continue;
+  }
   const coords = line.points.map(([lat, lon]) => `${lon},${lat}`).join(';');
   const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
   try {

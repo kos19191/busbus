@@ -5,13 +5,68 @@ import geo from './demo-geo.json';
  * Реальная геометрия по улицам (построена OSRM, см. scripts/build-geo.mjs).
  * Для маршрутов, которых ещё нет в geo, используется упрощённая схема ниже.
  */
-const REAL_GEO = geo as unknown as Record<string, [number, number][]>;
+type GeoStop = { id: string; name: string; lat: number; lon: number };
+const REAL_GEO = geo as unknown as Record<string, [number, number][] | GeoStop[]>;
 
-/**
- * Упрощённые линии демонстрационных маршрутов (по осям улиц реальных городов).
- * Нужны для демо-режима и для отрисовки линии маршрута в Красноярске,
- * где источник не отдаёт геометрию.
- */
+/** Остановки линии из данных источника (ключ `<город>:<вид>:<номер>:stops`). */
+export function realStopsFor(city: CityId, number: string, kind?: string): GeoStop[] | undefined {
+  const key = kind ? `${city}:${kind}:${number}:stops` : undefined;
+  const exact = key ? REAL_GEO[key] : undefined;
+  if (Array.isArray(exact) && exact.length && !Array.isArray(exact[0])) return exact as GeoStop[];
+  const hit = Object.keys(REAL_GEO).find(
+    (k) => k.endsWith(':stops') && k.startsWith(`${city}:`) && k.includes(`:${number}:`),
+  );
+  const val = hit ? REAL_GEO[hit] : undefined;
+  return Array.isArray(val) ? (val as GeoStop[]) : undefined;
+}
+
+/** Подставить геометрию по улицам и остановки источника, если они есть. */
+export function withRealGeo(line: DemoLine): DemoLine {
+  const key = `${line.city}:${line.kind}:${line.number}`;
+  const value = REAL_GEO[key];
+  const points = Array.isArray(value) && Array.isArray(value[0]) ? (value as [number, number][]) : undefined;
+  if (!points || points.length < 2) return line;
+
+  const source = realStopsFor(line.city, line.number, line.kind);
+  if (!source?.length) return { ...line, points };
+
+  const cum = cumulative(points);
+  const total = cum[cum.length - 1] || 1;
+  const stops = source.map((stop) => ({ name: stop.name, t: nearestShare(points, cum, total, stop) }));
+  return { ...line, points, stops, from: source[0].name, to: source[source.length - 1].name };
+}
+
+/** Накопленная длина линии (в градусах — для долей вдоль неё достаточно). */
+function cumulative(points: [number, number][]): number[] {
+  const cum = [0];
+  for (let i = 1; i < points.length; i++) {
+    const dLat = points[i][0] - points[i - 1][0];
+    const dLon = (points[i][1] - points[i - 1][1]) * Math.cos((points[i][0] * Math.PI) / 180);
+    cum.push(cum[i - 1] + Math.hypot(dLat, dLon));
+  }
+  return cum;
+}
+
+/** Доля вдоль линии для точки, ближайшей к остановке. */
+function nearestShare(
+  points: [number, number][],
+  cum: number[],
+  total: number,
+  stop: { lat: number; lon: number },
+): number {
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const dLat = points[i][0] - stop.lat;
+    const dLon = (points[i][1] - stop.lon) * Math.cos((points[i][0] * Math.PI) / 180);
+    const d = dLat * dLat + dLon * dLon;
+    if (d < bestD) {
+      bestD = d;
+      best = cum[i];
+    }
+  }
+  return Math.min(1, Math.max(0, best / total));
+}
 
 export interface DemoLine {
   city: CityId;
@@ -185,20 +240,17 @@ export function demoLinesFor(city: CityId): DemoLine[] {
   return DEMO_LINES.filter((l) => l.city === city).map(withRealGeo);
 }
 
-/** Подставить геометрию по улицам, если она есть. */
-export function withRealGeo(line: DemoLine): DemoLine {
-  const key = `${line.city}:${line.kind}:${line.number}`;
-  const points = REAL_GEO[key];
-  return points && points.length > 1 ? { ...line, points } : line;
-}
-
 export function realGeoFor(city: CityId, number: string, kind?: string): [number, number][] | undefined {
+  const asPoints = (v: unknown): [number, number][] | undefined =>
+    Array.isArray(v) && v.length > 1 && Array.isArray(v[0]) ? (v as [number, number][]) : undefined;
   if (kind) {
-    const exact = REAL_GEO[`${city}:${kind}:${number}`];
+    const exact = asPoints(REAL_GEO[`${city}:${kind}:${number}`]);
     if (exact) return exact;
   }
-  const hit = Object.entries(REAL_GEO).find(([k]) => k.startsWith(`${city}:`) && k.endsWith(`:${number}`));
-  return hit?.[1];
+  const hit = Object.entries(REAL_GEO).find(
+    ([k]) => !k.endsWith(':stops') && k.startsWith(`${city}:`) && k.endsWith(`:${number}`),
+  );
+  return hit ? asPoints(hit[1]) : undefined;
 }
 
 export function demoLineFor(city: CityId, number: string, kind?: string): DemoLine | undefined {
