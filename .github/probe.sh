@@ -72,6 +72,26 @@ while read -r f; do
   grep -oE '[a-zA-Z_]+\.php' js.tmp | sort -u | head -40 || true
 done < nskjs.txt
 
+say "NSK FORECAST EXAMPLE"
+for u in \
+  "https://map.nskgortrans.ru/forecast.php?id=1&type=platform" \
+  "https://map.nskgortrans.ru/forecast.php?id=1&type=stop" \
+  "https://map.nskgortrans.ru/forecast.php?id=99999&type=platform" ; do
+  echo "=== $u"
+  curl -sS -m 30 -w " [%{http_code}]" "$u" | head -c 600 || true
+  echo
+done
+say "NSK TRASSES EXAMPLE"
+curl -sS -m 30 -w " [%{http_code}]" "https://map.nskgortrans.ru/trasses.php?r=0-13-W-13" | head -c 800 || true
+echo
+say "NSK SEARCH CALCULATE"
+for u in \
+  "https://map.nskgortrans.ru/calculate.php?q=%D0%92%D0%BE%D0%BA%D0%B7%D0%B0%D0%BB" \
+  "https://map.nskgortrans.ru/calculate.php?from=55.03,82.92&to=55.01,82.95" ; do
+  echo "=== $u"
+  curl -sS -m 30 -w " [%{http_code}]" "$u" | head -c 500 || true
+  echo
+done
 say "NSK MAIN JS"
 curl -sS -m 30 "https://map.nskgortrans.ru/js/main.1.3.min.js?_136" -o main.js || true
 cat main.js | head -c 4400 || true
