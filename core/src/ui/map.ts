@@ -122,11 +122,20 @@ export class BusMap {
     if (!points.length) return;
     const bounds = L.latLngBounds(points.map(([lat, lon]) => L.latLng(lat, lon)));
     const size = this.map.getSize();
-    const top = 96;
     const sheet = this.map.getContainer().closest('.app')?.querySelector('.sheet') as HTMLElement | null;
-    const bottom = sheet ? Math.min(sheet.getBoundingClientRect().height, size.y * 0.62) : 24;
-    const pad = { paddingTopLeft: L.point(24, top), paddingBottomRight: L.point(24, Math.max(24, bottom)) };
-    this.map.fitBounds(bounds, { ...pad, animate: true, maxZoom: 15 });
+    const sheetH = sheet ? sheet.getBoundingClientRect().height : 0;
+    // на узком экране шторка может быть ещё свёрнута — резервируем половину высоты
+    const reserved = size.x < 760 ? Math.max(sheetH, size.y * 0.5) : 24;
+    const pad = {
+      paddingTopLeft: L.point(24, 96),
+      paddingBottomRight: L.point(24, Math.max(24, reserved)),
+    };
+    this.map.fitBounds(bounds, { ...pad, animate: false, maxZoom: 15 });
+  }
+
+  /** Пересчитать кадр после того, как шторка раскрылась (иначе линия уходит под неё). */
+  refitLine(): void {
+    if (this.linePoints.length) this.fitLine(this.linePoints);
   }
 
   getRouteIndex(): PolylineIndex | null {

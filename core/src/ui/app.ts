@@ -46,6 +46,7 @@ export class BusApp {
   private map!: BusMap;
   private pollTimer: number | null = null;
   private board: StopBoard | null = null;
+  private stopsLoading = false;
   private overview: Vehicle[] = [];
   /** Панель свёрнута до заголовка — больше карты */
   private collapsed = true;
@@ -129,6 +130,8 @@ export class BusApp {
     void this.drawRouteLine(route);
     void this.refresh(true);
     this.startPolling();
+    // шторка раскрывается анимацией — вписываем линию ещё раз, когда она на месте
+    window.setTimeout(() => this.map.refitLine(), 380);
   }
 
   private async drawRouteLine(route: Route): Promise<void> {
@@ -311,6 +314,8 @@ export class BusApp {
               if (t.id === 'map') this.collapsed = true;
               this.renderTabbar();
               this.renderSheet();
+              // список остановок подгружаем сами — не заставляем искать кнопку
+              if (t.id === 'stops' && !this.busesStops.length && !this.stopsLoading) void this.loadStops();
             },
           },
           h('span', { class: 'tabbar__icon' }, t.icon),
@@ -563,7 +568,9 @@ export class BusApp {
         ),
       ),
     );
-    if (!stops.length) {
+    if (this.stopsLoading && !stops.length) {
+      body.append(emptyState('⏳', 'Загружаем остановки…', 'Обычно это занимает пару секунд'));
+    } else if (!stops.length) {
       body.append(emptyState('🚏', 'Остановки не загружены', 'Нажмите «Обновить список» или включите демо-режим'));
     } else {
       body.append(h('div', { class: 'section-title' }, `Остановки · ${stops.length}`));
@@ -714,6 +721,8 @@ export class BusApp {
   }
 
   async loadStops(): Promise<void> {
+    this.stopsLoading = true;
+    this.renderSheet();
     try {
       this.busesStops = (await this.provider.stops?.(this.selected.query)) ?? [];
       if (!this.busesStops.length && this.provider.mode === 'live') {
@@ -722,6 +731,9 @@ export class BusApp {
       this.renderSheet();
     } catch (e) {
       this.toast(`Остановки: ${(e as Error).message}`);
+    } finally {
+      this.stopsLoading = false;
+      this.renderSheet();
     }
   }
 
