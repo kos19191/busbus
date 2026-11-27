@@ -195,7 +195,29 @@ export class BusApp {
   /** «Вся карта»: машины всех демо-маршрутов города (или подсказка для живого источника). */
   private async loadOverview(): Promise<void> {
     if (this.provider.mode !== 'demo') {
-      this.overview = [];
+      // живой источник: показываем все машины города одним слоем
+      try {
+        const all: Vehicle[] = [];
+        const snapshot = this.provider as unknown as { allVehicles?: () => Promise<Vehicle[]> };
+        if (typeof snapshot.allVehicles === 'function') {
+          all.push(...(await snapshot.allVehicles()));
+        } else {
+          for (const route of this.routes.slice(0, 24)) {
+            try {
+              all.push(...(await this.provider.vehicles(route)));
+            } catch {
+              /* маршрут мог не ответить */
+            }
+          }
+        }
+        this.overview = all;
+        if (!this.selected.route) {
+          this.map.setVehicles(all, this.selected.selectedVehicleId);
+          this.renderSheet();
+        }
+      } catch {
+        this.overview = [];
+      }
       return;
     }
     try {

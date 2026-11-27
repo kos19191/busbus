@@ -99,6 +99,13 @@ export class SnapshotProvider implements TransitProvider {
     return (await this.cityData()).routes;
   }
 
+  /** Все машины города одним запросом — для обзорного слоя карты. */
+  async allVehicles(): Promise<Vehicle[]> {
+    const data = await this.cityData();
+    const ageSec = Math.max(0, Math.min(600, (Date.now() - data.at) / 1000));
+    return data.vehicles.map((v) => this.advance(v, ageSec));
+  }
+
   async vehicles(route: Route): Promise<Vehicle[]> {
     const data = await this.cityData();
     const own = data.vehicles.filter((v) => v.routeId === route.id);
