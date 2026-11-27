@@ -1,0 +1,62 @@
+[
+ {
+  "route": "nsk:bus:13",
+  "sourceStops": 58,
+  "first": "ЖК \"Северная корона\" (Красный пр-кт)",
+  "last": "Ключ-Камышенское Плато"
+ },
+ {
+  "route": "nsk:bus:13",
+  "km": 35.8,
+  "points": 439,
+  "stops": 58
+ },
+ {
+  "route": "nsk:bus:8",
+  "sourceStops": 38,
+  "first": "Цветной проезд",
+  "last": "Вокзал \"Новосибирск-Главный\""
+ },
+ {
+  "route": "nsk:bus:8",
+  "km": 33.7,
+  "points": 527,
+  "stops": 38
+ },
+ {
+  "route": "nsk:trolley:8",
+  "sourceStops": 40,
+  "first": "Затулинский ж/м",
+  "last": "Ключ-Камышенское Плато"
+ },
+ {
+  "route": "nsk:trolley:8",
+  "km": 25,
+  "points": 307,
+  "stops": 40
+ },
+ {
+  "route": "nsk:tram:13",
+  "sourceStops": 26,
+  "first": "Гусинобродское шоссе (т)",
+  "last": "Ул. Писарева"
+ },
+ {
+  "route": "nsk:tram:13",
+  "km": 14.7,
+  "points": 327,
+  "stops": 26
+ },
+ {
+  "route": "krsk:bus:85",
+  "km": 34.9,
+  "points": 442,
+  "stops": 0
+ },
+ {
+  "route": "krsk:tram:6тр",
+  "km": 26.6,
+  "points": 304,
+  "stops": 0
+ }
+]
