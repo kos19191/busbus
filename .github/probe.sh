@@ -144,4 +144,52 @@ curl -sS -m 40 -D - "https://api.codetabs.com/v1/proxy?quest=https://map.nskgort
 say "PROXY ALLORIGINS"
 curl -sS -m 40 -D - "https://api.allorigins.win/raw?url=https%3A%2F%2Fmap.nskgortrans.ru%2Fmarkers.php%3Fr%3D1-8-W-8" | head -c 900 || true
 
+say "NSK STOPS V2"
+# 1) listmarsh: реальные id маршрутов (нужны для trasses/forecast)
+echo "--- listmarsh sample"
+curl -sS -m 30 "https://map.nskgortrans.ru/listmarsh.php?r" -o lm.json || true
+wc -c lm.json || true
+head -c 1200 lm.json || true
+python3 - <<'PY' || true
+import json
+try:
+    d = json.load(open('lm.json'))
+except Exception as e:
+    print('parse fail', e); raise SystemExit
+for g in d[:4]:
+    print('type=', g.get('type'), 'ways=', len(g.get('ways') or []))
+    for w in (g.get('ways') or [])[:4]:
+        print('   ', w)
+PY
+# 2) строим r= по первой автобусной группе и пробуем trasses + forecast
+python3 - <<'PY' || true
+import json, urllib.parse, subprocess
+try:
+    d = json.load(open('lm.json'))
+except Exception:
+    raise SystemExit
+bus = next((g for g in d if g.get('type') in ('0', 0)), None)
+if not bus:
+    raise SystemExit('no bus group')
+w = (bus.get('ways') or [])[0]
+r = f"0-{w['marsh']}-W-{w['name']}"
+print('R =', r)
+q = urllib.parse.quote(r)
+for path in ('trasses.php', 'forecast.php'):
+    url = f"https://map.nskgortrans.ru/{path}?r={q}" if path == 'trasses.php' else f"https://map.nskgortrans.ru/{path}?id={urllib.parse.quote(w['stopb'])}&type=platform"
+    print('===', url)
+    out = subprocess.run(['curl', '-sS', '-m', '40', url], capture_output=True, text=True).stdout
+    print(out[:1500])
+PY
+# 3) WAP-табло: пробуем реальные параметры с главной m.nskgortrans.ru
+echo "--- WAP index links"
+curl -sS -m 30 "https://m.nskgortrans.ru/index.php?t=2" -o wap.html || true
+wc -c wap.html || true
+python3 - <<'PY' || true
+import re
+html = open('wap.html', encoding='utf-8', errors='replace').read()
+for m in re.findall(r'href="([^"]*index\.php[^"]*)"', html)[:25]:
+    print(m)
+PY
+
 say "DONE"

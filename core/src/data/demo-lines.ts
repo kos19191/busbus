@@ -211,11 +211,6 @@ export function demoLineFor(city: CityId, number: string, kind?: string): DemoLi
   const template = lines.find((l) => l.number === number && (!kind || l.kind === kind)) ?? lines.find((l) => l.number === number);
   if (!template) return undefined;
   return { ...template, points: direct };
-  return (
-    lines.find((l) => l.number === number && (!kind || l.kind === kind)) ??
-    lines.find((l) => l.number === number) ??
-    lines[0]
-  );
 }
 
 /** Экспорт линий для отрисовки в Красноярске: линия по номеру маршрута */
