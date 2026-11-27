@@ -354,6 +354,25 @@ a {
   opacity: 0.55;
 }
 
+/* Мелкий масштаб: только точка с курсом, без номера — иначе город «зарастает» плашками */
+.vehicle-marker--compact {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  gap: 0;
+  justify-content: center;
+  border-width: 2px;
+  font-size: 0;
+}
+
+.vehicle-marker--compact .vehicle-marker__arrow {
+  font-size: 10px;
+}
+
+.vehicle-marker--compact span:not(.vehicle-marker__arrow) {
+  display: none;
+}
+
 .vehicle-marker__arrow {
   display: inline-block;
   font-size: 11px;

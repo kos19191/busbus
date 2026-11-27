@@ -54,6 +54,7 @@ export class BusMap {
       fadeAnimation: true,
       zoomAnimation: true,
     });
+    this.map.on('zoomend', () => this.refreshIcons());
     this.tiles = L.tileLayer(opts.tileUrl ?? 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '© OpenStreetMap',
@@ -206,14 +207,25 @@ export class BusMap {
 
   private buildIcon(v: Vehicle, selected: boolean): L.DivIcon {
     const color = KIND_COLOR[v.kind] ?? '#ff7a1a';
-    const arrow = v.bearing !== undefined ? `<span class="vehicle-marker__arrow" data-arrow style="transform:rotate(${v.bearing}deg)">➤</span>` : '';
+    const arrow =
+      v.bearing !== undefined
+        ? `<span class="vehicle-marker__arrow" data-arrow style="transform:rotate(${v.bearing}deg)">➤</span>`
+        : '';
     const dim = v.status && /обед|отстой|перерыв/i.test(v.status) ? ' vehicle-marker--dim' : '';
+    // на мелком масштабе город целиком: показываем только точку-стрелку,
+    // номер маршрута возвращаем при приближении (иначе маркеры перекрывают друг друга)
+    const compact = this.map.getZoom() < 13 && !selected ? ' vehicle-marker--compact' : '';
     return L.divIcon({
       className: '',
-      html: `<div class="vehicle-marker${dim}${selected ? ' vehicle-marker--selected' : ''}" style="--marker-bg:${color}" data-id="${v.id}">${arrow}<span>${escapeHtml(v.routeNumber)}</span></div>`,
-      iconSize: [46, 24],
-      iconAnchor: [23, 12],
+      html: `<div class="vehicle-marker${dim}${compact}${selected ? ' vehicle-marker--selected' : ''}" style="--marker-bg:${color}" data-id="${v.id}">${arrow}<span>${escapeHtml(v.routeNumber)}</span></div>`,
+      iconSize: compact ? [20, 20] : [46, 24],
+      iconAnchor: compact ? [10, 10] : [23, 12],
     });
+  }
+
+  /** Перерисовать маркеры под текущий зум (компактный/полный вид). */
+  private refreshIcons(): void {
+    for (const vm of this.markers.values()) vm.marker.setIcon(this.buildIcon(vm.vehicle, false));
   }
 
   selectVehicle(id: string | null): void {
