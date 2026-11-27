@@ -66,8 +66,28 @@ cd apk && gradle assembleDebug   # APK (нужен Android SDK)
 
 ## Android-приложение
 
-Сборка APK уже настроена в GitHub Actions (`.github/workflows/android.yml`).
-Свежий APK публикуется в ветку `ci/apk` (`ci/apk/busbus.apk`), скриншоты — в `ci/shots`.
+**Готовый APK:** [последний релиз](https://github.com/kos19191/busbus/releases/latest)
+(`busbus-<версия>.apk`, ~1.6 МБ). Требуется Android 6.0+.
+
+Сборка APK — в GitHub Actions:
+
+* `release.yml` — по пушу тега `vX.Y.Z` собирает release-APK (R8 + shrink), проверяет badging
+  и публикует GitHub Release с вложенным файлом. Если в секретах репозитория лежит keystore
+  (`BUSBUS_KEYSTORE_B64`, `BUSBUS_KEYSTORE_PASSWORD`, `BUSBUS_KEY_ALIAS`, `BUSBUS_KEY_PASSWORD`),
+  APK подписывается им; иначе — debug-ключом CI (для личной установки этого достаточно,
+  для Google Play нужен свой keystore).
+* `android.yml` — на каждый пуш собирает debug- и release-APK в ветку `ci/apk`.
+
+Как выпустить новую версию:
+
+```bash
+# 1) поднять версию
+printf 'versionName=1.3.0\nversionCode=4\n' > apk/version.properties
+# 2) обновить текст релиза
+$EDITOR .github/release-notes.md
+# 3) закоммитить, поставить тег и запушить его — workflow соберёт и опубликует релиз
+git commit -am "release: 1.3.0" && git tag v1.3.0 && git push origin HEAD v1.3.0
+```
 
 Почему нужен отдельный APK, если есть сайт: официальные порталы не отдают CORS-заголовки,
 поэтому в обычном браузере живые данные получить нельзя. В приложении используется нативный
