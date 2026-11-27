@@ -56,6 +56,38 @@ curl -sS -m 30 "https://m.nskgortrans.ru/index.php?m=8&t=2&tt=1&s=0&r=A&p=1" | h
 say "BUSTI DATASOURCES"
 curl -sS -m 30 "https://ru.busti.me/api/v1/datasources/" | head -c 2000 || true
 
+say "NSK PAGE SOURCES"
+curl -sS -m 30 "https://map.nskgortrans.ru/" -o nsk.html || true
+grep -oE '(src|href)="[^"]+"' nsk.html | sort -u | head -60 || true
+
+say "NSK JS LOOKUP"
+grep -oE 'src="[^"]+\.js[^"]*"' nsk.html | sed 's/src="//;s/"$//' | sort -u > nskjs.txt || true
+cat nskjs.txt || true
+while read -r f; do
+  test -n "$f" || continue
+  case "$f" in http*) u="$f";; *) u="https://map.nskgortrans.ru/$f";; esac
+  echo "=== $u"
+  curl -sS -m 60 "$u" -o js.tmp || continue
+  wc -c < js.tmp
+  grep -oE '[a-zA-Z_]+\.php' js.tmp | sort -u | head -40 || true
+done < nskjs.txt
+
+say "NSK GRASP VARIANTS"
+for u in \
+  "https://map.nskgortrans.ru/components/com_planrasp/helpers/grasp.php?q=%D0%92%D0%BE%D0%BA%D0%B7%D0%B0%D0%BB" \
+  "https://map.nskgortrans.ru/components/com_planrasp/helpers/grasp.php?q=%D0%92%D0%BE%D0%BA%D0%B7%D0%B0%D0%BB&typeview=stops&t=1" \
+  "https://map.nskgortrans.ru/grasp.php?q=%D0%92%D0%BE%D0%BA%D0%B7%D0%B0%D0%BB&typeview=stops" \
+  "https://map.nskgortrans.ru/stops.php?q=%D0%92%D0%BE%D0%BA%D0%B7%D0%B0%D0%BB" \
+  "https://map.nskgortrans.ru/stops.php" ; do
+  echo "=== $u"
+  curl -sS -m 30 -w " [%{http_code}]" "$u" | head -c 500 || true
+  echo
+done
+
+say "NSK STOP BOARD VARIANTS"
+curl -sS -m 30 "https://m.nskgortrans.ru/" -o m.html || true
+grep -oE 'href="[^"]+"' m.html | sort -u | head -40 || true
+
 say "OVERPASS"
 curl -sS -m 120 -G "https://overpass-api.de/api/interpreter" --data-urlencode 'data=[out:json][timeout:60];node(55.0,82.9,55.02,82.93)[public_transport=platform];out 3;' | head -c 900 || true
 
