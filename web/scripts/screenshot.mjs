@@ -10,7 +10,19 @@ const URL = process.env.SHOT_URL || 'http://127.0.0.1:4173/';
 const OUT = join(process.cwd(), '..', 'ci', 'shots');
 mkdirSync(OUT, { recursive: true });
 
-const executablePath = process.env.CHROME_PATH || '/usr/bin/google-chrome';
+import { existsSync } from 'node:fs';
+const candidates = [
+  process.env.CHROME_PATH,
+  '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
+  '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+].filter(Boolean);
+const executablePath = candidates.find((p) => existsSync(p));
+if (!executablePath) {
+  console.error('Chrome не найден. Проверьте CHROME_PATH.');
+  process.exit(1);
+}
 
 const scenarios = [
   {
