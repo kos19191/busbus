@@ -1,0 +1,19 @@
+/* Панель-«шторка»: состояние задаётся высотой, а не трансформом снизу. */
+.sheet {
+  max-height: min(72vh, calc(100% - 150px));
+  overflow: hidden;
+}
+
+.sheet__body {
+  overscroll-behavior: contain;
+}
+
+@media (max-width: 759px) {
+  .sheet {
+    max-height: 62vh;
+  }
+
+  .sheet--tall {
+    max-height: 78vh;
+  }
+}

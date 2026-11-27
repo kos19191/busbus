@@ -46,6 +46,7 @@ export class BusApp {
   private map!: BusMap;
   private pollTimer: number | null = null;
   private board: StopBoard | null = null;
+  private overview: Vehicle[] = [];
   private busesStops: Stop[] = [];
   private refs: {
     root: HTMLElement;
@@ -81,6 +82,7 @@ export class BusApp {
     this.renderTopbar();
     this.renderTabbar();
     this.renderSheet();
+    void this.loadRoutes().then(() => this.loadOverview());
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) this.stopPolling();
       else this.startPolling();
@@ -115,6 +117,8 @@ export class BusApp {
   }
 
   selectRoute(route: Route): void {
+    this.tab = 'map';
+    this.renderTabbar();
     this.selected = { ...this.selected, route, vehicles: [], selectedVehicleId: null, status: 'loading', stop: null };
     this.store.pushRecent(route.id);
     this.board = null;
@@ -166,10 +170,38 @@ export class BusApp {
     this.renderSheet();
   }
 
+  /** «Вся карта»: машины всех демо-маршрутов города (или подсказка для живого источника). */
+  private async loadOverview(): Promise<void> {
+    if (this.provider.mode !== 'demo') {
+      this.overview = [];
+      return;
+    }
+    try {
+      const all: Vehicle[] = [];
+      for (const route of this.routes.slice(0, 8)) {
+        try {
+          all.push(...(await this.provider.vehicles(route)));
+        } catch {
+          /* маршрут мог не отдать данные */
+        }
+      }
+      this.overview = all;
+      if (!this.selected.route) {
+        this.map.setVehicles(all, this.selected.selectedVehicleId);
+        this.renderSheet();
+      }
+    } catch {
+      /* обзор необязателен */
+    }
+  }
+
   private startPolling(): void {
     this.stopPolling();
     const ms = this.provider.mode === 'demo' ? 1500 : 12_000;
-    this.pollTimer = window.setInterval(() => void this.refresh(), ms);
+    this.pollTimer = window.setInterval(() => {
+      void this.refresh();
+      if (!this.selected.route) void this.loadOverview();
+    }, ms);
   }
 
   private stopPolling(): void {
@@ -188,7 +220,7 @@ export class BusApp {
     const search = h('input', {
       class: 'searchbar__input',
       type: 'search',
-      placeholder: 'Маршрут или остановка',
+      placeholder: 'Маршрут / остановка',
       value: this.selected.query,
       onInput: (e: Event) => {
         this.selected = { ...this.selected, query: (e.target as HTMLInputElement).value };
@@ -225,10 +257,11 @@ export class BusApp {
     this.selected = { route: null, kindFilter: 'all', query: '', vehicles: [], selectedVehicleId: null, status: 'idle', stop: null };
     this.board = null;
     this.map.clearAll();
+    this.overview = [];
     this.rebuildProvider();
     this.renderTopbar();
     this.renderSheet();
-    void this.loadRoutes();
+    void this.loadRoutes().then(() => this.loadOverview());
     this.toast(`Город: ${CITIES[next].title}`);
   }
 
@@ -517,10 +550,11 @@ export class BusApp {
                 this.selected = { ...this.selected, route: null, vehicles: [], selectedVehicleId: null, status: 'idle' };
                 this.board = null;
                 this.map.clearAll();
+                this.overview = [];
                 this.rebuildProvider();
                 this.renderTopbar();
                 this.renderSheet();
-                void this.loadRoutes();
+                void this.loadRoutes().then(() => this.loadOverview());
               },
             },
             CITIES[id].title,
@@ -620,6 +654,7 @@ export class BusApp {
 
   async setMode(mode: DataMode): Promise<void> {
     this.store.set({ mode });
+    this.overview = [];
     this.selected = { ...this.selected, status: 'idle', vehicles: [], selectedVehicleId: null, route: null };
     this.map.clearAll();
     this.rebuildProvider();
@@ -728,7 +763,8 @@ export class BusApp {
   }
 
   private allMapVehicles(): Vehicle[] {
-    return this.selected.vehicles;
+    if (this.selected.vehicles.length) return this.selected.vehicles;
+    return this.overview;
   }
 
   private recentRoutes(): Route[] {

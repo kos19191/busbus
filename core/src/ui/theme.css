@@ -1,3 +1,5 @@
+@import './sheet.css';
+
 /* BusBus — общая тема. Без внешних зависимостей и шрифтов. */
 :root {
   --bg: #0e1116;
@@ -303,6 +305,7 @@ a {
 .tabbar {
   position: relative;
   z-index: 5;
+  margin-top: auto;
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   background: var(--panel-solid);
@@ -382,6 +385,15 @@ a {
 .leaflet-container {
   background: #dfe6ee;
   font-family: var(--font);
+}
+
+/* Ночной режим карты: инверсия тайлов OSM, как в «ночных» картах */
+:root[data-theme='dark'] .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.92) contrast(0.92) saturate(0.75);
+}
+
+:root[data-theme='dark'] .leaflet-container {
+  background: #10151c;
 }
 
 .leaflet-control-attribution {
