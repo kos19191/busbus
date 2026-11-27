@@ -72,6 +72,25 @@ while read -r f; do
   grep -oE '[a-zA-Z_]+\.php' js.tmp | sort -u | head -40 || true
 done < nskjs.txt
 
+say "NSK CONFIG JS"
+curl -sS -m 30 "https://map.nskgortrans.ru/js/config.js?_3" || true
+echo
+say "NSK FORECAST PROBES"
+for u in \
+  "https://map.nskgortrans.ru/forecast.php?stop=1" \
+  "https://map.nskgortrans.ru/forecast.php?q=1" \
+  "https://map.nskgortrans.ru/forecast.php" \
+  "https://map.nskgortrans.ru/calculate.php" ; do
+  echo "=== $u"
+  curl -sS -m 30 -w " [%{http_code}]" "$u" | head -c 400 || true
+  echo
+done
+say "NSK LIB JS grep"
+curl -sS -m 30 "https://map.nskgortrans.ru/js/lib.js?_34" -o lib.js || true
+grep -oE '.{80}forecast.php.{120}' lib.js | head -5 || true
+grep -oE '.{60}calculate.php.{120}' lib.js | head -3 || true
+grep -oE '.{40}(stop|stops)[A-Za-z_]*\s*[:=].{60}' lib.js | head -10 || true
+
 say "NSK GRASP VARIANTS"
 for u in \
   "https://map.nskgortrans.ru/components/com_planrasp/helpers/grasp.php?q=%D0%92%D0%BE%D0%BA%D0%B7%D0%B0%D0%BB" \
