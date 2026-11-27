@@ -46,7 +46,14 @@ jobs:
           ls /usr/bin | grep -i chrom | head -5 || true
           npx vite preview --outDir dist --port 4173 --host 127.0.0.1 &
           sleep 4
-          SHOT_LIVE=1 node ./scripts/screenshot.mjs
+          # живой режим в браузере читает снапшот из ветки ci/live (снят live.yml);
+          # для проверки подсовываем локальную копию файла
+          if curl -fsSL -o ../ci/shots/snapshot-nsk.json \
+            "https://raw.githubusercontent.com/kos19191/busbus/ci/live/data/live/nsk.json"; then
+            BUSBUS_SNAPSHOT_LOCAL=../ci/shots/snapshot-nsk.json SHOT_LIVE=1 node ./scripts/screenshot.mjs
+          else
+            node ./scripts/screenshot.mjs
+          fi
 
       - name: Publish screenshots
         run: |

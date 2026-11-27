@@ -3,7 +3,7 @@
  * Запускается после `vite preview` (http://127.0.0.1:4173).
  */
 import puppeteer from 'puppeteer-core';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const URL = process.env.SHOT_URL || 'http://127.0.0.1:4173/';
@@ -116,6 +116,18 @@ for (const sc of [...scenarios, ...(process.env.SHOT_LIVE ? [liveScenario] : [])
   });
   page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
   await page.setViewport(sc.viewport);
+  // локальный снапшот живых данных (CI кладёт его рядом), иначе берём URL из настроек
+  if (process.env.BUSBUS_SNAPSHOT_LOCAL) {
+    await page.setRequestInterception(true);
+    page.on('request', (req) => {
+      if (req.url().includes('raw.githubusercontent.com') && req.url().endsWith('.json')) {
+        const body = readFileSync(process.env.BUSBUS_SNAPSHOT_LOCAL, 'utf8');
+        req.respond({ status: 200, contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body });
+        return;
+      }
+      req.continue();
+    });
+  }
   if (sc.init) await page.evaluateOnNewDocument(sc.init);
   await page.goto(URL, { waitUntil: 'networkidle2', timeout: 45000 });
   await new Promise((r) => setTimeout(r, 900));
